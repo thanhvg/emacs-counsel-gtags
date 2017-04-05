@@ -110,7 +110,7 @@ This variable does not have any effect unless
       (message "gtags is generating tags....")
       (unless (zerop (process-file "gtags" nil nil nil "-q"
                                    (concat "--gtagslabel=" label)))
-        (error "Faild: 'gtags -q'"))
+        (error "Failed: 'gtags -q'"))
       root)))
 
 (defun counsel-gtags--root ()
@@ -244,8 +244,18 @@ Prompt for TAGNAME if not given."
     (when (string-match counsel-gtags--include-regexp line)
       (match-string-no-properties 1 line))))
 
-(defun counsel-gtags--read-file-name ()
-  (let ((default-file (counsel-gtags--include-file))
+(defun counsel-gtags--default-directory ()
+  (setq counsel-gtags--original-default-directory
+        (cl-case counsel-gtags-path-style
+          ((relative absolute) default-directory)
+          (root (counsel-gtags--root)))))
+
+;;;###autoload
+(defun counsel-gtags-find-file (&optional filename)
+  "Search for FILENAME among tagged files."
+  (interactive)
+  (let ((default-file (or filename
+                          (counsel-gtags--include-file)))
         (candidates
          (with-temp-buffer
            (let* ((options (cl-case counsel-gtags-path-style
@@ -263,22 +273,7 @@ Prompt for TAGNAME if not given."
     (ivy-read "Find File: " candidates
               :initial-input default-file
               :action #'counsel-gtags--find-file
-              :caller 'counsel-gtags--read-tag)))
-
-(defun counsel-gtags--default-directory ()
-  (setq counsel-gtags--original-default-directory
-        (cl-case counsel-gtags-path-style
-          ((relative absolute) default-directory)
-          (root (counsel-gtags--root)))))
-
-;;;###autoload
-(defun counsel-gtags-find-file (filename)
-  "Search for FILENAME among tagged files.
-Prompt for FILENAME if not given."
-  (interactive
-   (list (counsel-gtags--read-file-name)))
-  (let ((default-directory (counsel-gtags--default-directory)))
-    (find-file filename)))
+              :caller 'counsel-gtags-find-file-name)))
 
 ;;;###autoload
 (defun counsel-gtags-go-backward ()
