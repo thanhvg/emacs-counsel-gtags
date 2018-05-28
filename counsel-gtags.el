@@ -143,11 +143,16 @@ This variable does not have any effect unless
       (push "-T" options))
     options))
 
-(defun counsel-gtags--complete-candidates (type)
-  (let ((cmd-options (counsel-gtags--command-options type)))
-    (push "-c" cmd-options)
+(defun counsel-gtags--complete-candidates (type &optional prefix)
+  "Gather the candidates asynchronously for `ivy-read'.
+
+Build global parameters according to TYPE and using PREFIX (for query)
+if provided."
+  (let ((reversed-cmd-options (append
+                               (list prefix "-c")
+                               (counsel-gtags--command-options type))))
     (counsel--async-command
-     (mapconcat #'identity (cons "global" (reverse cmd-options)) " "))
+     (mapconcat #'identity (cons "global" (reverse reversed-cmd-options)) " "))
     nil))
 
 (defun counsel-gtags--file-and-line (candidate)
@@ -172,13 +177,20 @@ This variable does not have any effect unless
       (counsel-gtags--push 'to))))
 
 (defun counsel-gtags--read-tag (type)
+  "Prompt the user for selecting a tag using `ivy-read'.
+
+Use TYPE ∈ '(definition reference symbol) for defining global parameters.
+If `counsel-gtags-use-input-at-point' is non-nil, will use symbol at point as
+initial input for `ivy-read'."
   (let ((default-val (and counsel-gtags-use-input-at-point (thing-at-point 'symbol)))
         (prompt (assoc-default type counsel-gtags--prompts)))
-    (ivy-read prompt (counsel-gtags--complete-candidates type)
+    (ivy-read prompt (lambda (input)
+                       (counsel-gtags--complete-candidates type input))
               :initial-input default-val
               :unwind (lambda ()
                         (counsel-delete-process)
                         (swiper--cleanup))
+              :dynamic-collection t
               :caller 'counsel-gtags--read-tag)))
 
 (defun counsel-gtags--tag-directory ()
@@ -201,10 +213,18 @@ This variable does not have any effect unless
     (apply #'process-lines "global" (append (reverse options) (list tagname)))))
 
 (defun counsel-gtags--select-file (type tagname &optional extra-options auto-select-only-candidate)
+  "Prompt the user to select a file_path:position according to query.
+
+Use TYPE ∈ '(definition reference symbol) for defining global parameters.
+Use TAGNAME for global query.
+Extra command line parameters to global are forwarded through EXTRA-OPTIONS."
   (let* ((root (counsel-gtags--default-directory))
          (encoding buffer-file-coding-system)
          (default-directory root)
-         (collection (counsel-gtags--collect-candidates type tagname encoding extra-options)))
+         (collection (counsel-gtags--collect-candidates
+                      type tagname encoding extra-options))
+         (ivy-auto-select-single-candidate t) ;; see issue #7
+         )
     (if (and auto-select-only-candidate (= (length collection) 1))
         (counsel-gtags--find-file (car collection))
       (ivy-read "Pattern: " collection
