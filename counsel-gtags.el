@@ -68,6 +68,14 @@ If non-nil, the symbol at point is used as default value when
 searching for a tag."
   :type 'boolean)
 
+(defcustom counsel-gtags-global-extra-update-options-list nil
+  "List of extra arguments passed to global when updating database."
+  :type 'list)
+
+(defcustom counsel-gtags-gtags-extra-update-options-list nil
+  "List of extra arguments passed to gtags when updating database."
+  :type 'list)
+
 (defcustom counsel-gtags-prefix-key "\C-c"
   "Key binding used for `counsel-gtags-mode-map'.
 This variable does not have any effect unless
@@ -388,10 +396,22 @@ Prompt for ROOTDIR and LABEL if not given.  This command is asynchronous."
     (otherwise 'single-update)))
 
 (defun counsel-gtags--update-tags-command (how-to)
+  "Build global command line to update commands.
+HOW-TO ∈ '(entire-update generate-other-directory single-update) per
+`counsel-gtags--how-to-update-tags'."
+  ;; note: mayble use `-flatten' here
   (cl-case how-to
-    (entire-update '("global" "-u"))
-    (generate-other-directory (list "gtags" (counsel-gtags--read-tag-directory)))
-    (single-update (list "global" "--single-update" (counsel-gtags--real-file-name)))))
+    (entire-update
+     (append '("global" "-u")
+	     counsel-gtags-global-extra-update-options-list))
+    (generate-other-directory
+     (append '("gtags")
+	     counsel-gtags-global-extra-update-options-list
+	     (list (counsel-gtags--read-tag-directory))))
+    (single-update
+     (append '("global" "--single-update")
+	     counsel-gtags-global-extra-update-options-list
+	     (list (counsel-gtags--real-file-name))))))
 
 (defun counsel-gtags--update-tags-p (how-to interactive-p current-time)
   (or interactive-p
