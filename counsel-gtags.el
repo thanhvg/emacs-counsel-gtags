@@ -363,13 +363,14 @@ Prompt for ROOTDIR and LABEL if not given.  This command is asynchronous."
      proc
      (counsel-gtags--make-gtags-sentinel 'create))))
 
-(defun counsel-gtags--real-file-name ()
-  (let ((buffile (buffer-file-name)))
-    (unless buffile
-      (error "This buffer is not related to file."))
-    (if (file-remote-p buffile)
-        (tramp-file-name-localname (tramp-dissect-file-name buffile))
-      (file-truename buffile))))
+(defun counsel-gtags--real-file-name (&optional fn)
+  "Return real file name for file path `FN', which defaults to current buffer's file"
+  (let ((filename (or fn
+                      (buffer-file-name)
+                      (error "This buffer is not related to any file."))))
+    (if (file-remote-p filename)
+        (tramp-file-name-localname (tramp-dissect-file-name filename))
+      (file-truename filename))))
 
 (defun counsel-gtags--read-tag-directory ()
   (let ((dir (read-directory-name "Directory tag generated: " nil nil t)))
@@ -416,7 +417,9 @@ database in prompted directory."
 
 (defun counsel-gtags--from-here (tagname)
   (let* ((line (line-number-at-pos))
-         (from-here-opt (format "--from-here=%d:%s" line (counsel-gtags--real-file-name))))
+         (root (counsel-gtags--real-file-name (counsel-gtags--default-directory)))
+         (file (counsel-gtags--real-file-name))
+         (from-here-opt (format "--from-here=%d:%s" line (file-relative-name file root))))
     (counsel-gtags--select-file 'from-here tagname (list from-here-opt) t)))
 
 ;;;###autoload
