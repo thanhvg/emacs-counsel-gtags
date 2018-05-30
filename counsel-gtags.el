@@ -143,16 +143,36 @@ This variable does not have any effect unless
       (push "-T" options))
     options))
 
-(defun counsel-gtags--complete-candidates (type &optional prefix)
+(defun counsel-gtags--complete-candidates (type &optional query)
   "Gather the candidates asynchronously for `ivy-read'.
 
-Build global parameters according to TYPE and using PREFIX (for query)
-if provided."
-  (let ((reversed-cmd-options (append
-                               (list prefix "-c")
-                               (counsel-gtags--command-options type))))
-    (counsel--async-command
-     (mapconcat #'identity (cons "global" (reverse reversed-cmd-options)) " "))
+Build global parameters according to TYPE.
+
+Because of optimization issues, currently using `grep-command' (defaults
+to \"grep\") to filter out object name candidates using QUERY if provided."
+  (let* ((grep (or grep-command "grep"))
+	 (canon-grep (car (save-match-data
+			    (split-string grep " " t))))
+	 (have-opt-tools (and query
+			      (executable-find canon-grep)
+			      (executable-find "cat")
+			      (executable-find "sh")))
+	 (reversed-cmd-options (append
+				`("-c")
+				(counsel-gtags--command-options type)))
+	 (global-command-list (cons "global" (reverse reversed-cmd-options)))
+	 (global-command-str (mapconcat #'identity global-command-list " "))
+	 )
+    (if have-opt-tools
+	(let* ((filter-command (format "%s '%s' | cat"
+				  grep ;; https://stackoverflow.com/a/6550543/3637404
+				  query))
+	       (filtered-command-str (format "sh -c \"%s | %s\""
+					global-command-str
+					filter-command)))
+	  (counsel--async-command filtered-command-str))
+      ;; else, default to let ivy filter object names
+      (counsel--async-command global-command-str))
     nil))
 
 (defun counsel-gtags--file-and-line (candidate)
@@ -234,7 +254,7 @@ Extra command line parameters to global are forwarded through EXTRA-OPTIONS."
 ;;;###autoload
 (defun counsel-gtags-find-definition (tagname)
   "Search for TAGNAME definition in tag database.
-Prompt for TAGNAME if not given."
+Prompt for TAGNAME using `counsel-gtags--read-tag' if not given."
   (interactive
    (list (counsel-gtags--read-tag 'definition)))
   (counsel-gtags--select-file 'definition tagname))
@@ -242,7 +262,7 @@ Prompt for TAGNAME if not given."
 ;;;###autoload
 (defun counsel-gtags-find-reference (tagname)
   "Search for TAGNAME reference in tag database.
-Prompt for TAGNAME if not given."
+Prompt for TAGNAME using `counsel-gtags--read-tag' if not given."
   (interactive
    (list (counsel-gtags--read-tag 'reference)))
   (counsel-gtags--select-file 'reference tagname))
@@ -250,7 +270,7 @@ Prompt for TAGNAME if not given."
 ;;;###autoload
 (defun counsel-gtags-find-symbol (tagname)
   "Search for TAGNAME symbol in tag database.
-Prompt for TAGNAME if not given."
+Prompt for TAGNAME using `counsel-gtags--read-tag' if not given."
   (interactive
    (list (counsel-gtags--read-tag 'symbol)))
   (counsel-gtags--select-file 'symbol tagname))
