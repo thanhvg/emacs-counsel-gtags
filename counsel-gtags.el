@@ -28,6 +28,7 @@
 
 (require 'counsel)
 (require 'cl-lib)
+(require 'rx)
 
 (declare-function cygwin-convert-file-name-from-windows "cygw32.c")
 (declare-function cygwin-convert-file-name-to-windows "cygw32.c")
@@ -151,17 +152,69 @@ This variable does not have any effect unless
       (push "-T" options))
     options))
 
-(defun counsel-gtags--complete-candidates (type &optional prefix)
-  "Gather the candidates asynchronously for `ivy-read'.
+(defun counsel-gtags--string-looks-like-regex (s)
+  "Return non-nil if S has special regex characters."
+  (and s
+       (save-match-data
+	 (string-match (rx (any "." "^" "*" "+" "?" "{" "}" "[" "]"
+				"$" "(" ")"))
+		       s))))
 
-Build global parameters according to TYPE and using PREFIX (for query)
-if provided."
-  (let ((reversed-cmd-options (append
-                               (list prefix "-c")
-                               (counsel-gtags--command-options type))))
-    (counsel--async-command
-     (mapconcat #'identity (cons "global" (reverse reversed-cmd-options)) " "))
-    nil))
+(defun counsel-gtags--complete-candidates (type &optional query)
+  "Gather the object names asynchronously for `ivy-read'.
+
+Build global parameters according to TYPE and using QUERY
+if provided.
+If QUERY starts with `^',it will delegate the search to global (ie: it's faster)
+but the `^' won't be forwarded.
+Otherwise, the query will be filtered using `grep-command' (when available).
+These optimization are due to global providing a \"search by prefix\" but not a
+\"search name by regex\" and that listing the database could be really slow."
+  (let* ((shell-command "sh")
+	 (non-empty-query (< 1 (length query)))
+	 (command-line (cond
+			((and non-empty-query
+			      (string-prefix-p "^" query)
+			      (not (counsel-gtags--string-looks-like-regex
+				    ;; skip "^" at the beginning
+				    (substring query 1))))
+			 ;; tell global to search for prefix
+			 (append
+			  `("global")
+			  (reverse
+			   (append
+			    `(,(substring query 1) "-c")
+			    (counsel-gtags--command-options type)))))
+			((and non-empty-query
+			      (executable-find shell-command)
+			      (executable-find (or grep-command
+						   "grep")))
+			 ;; run all database, pipe with grep
+			 (list shell-command "-c"
+			       (format "\"%s\""
+				  (mapconcat #'identity
+					     (append ;; global command here
+					      `("global")
+					      (reverse
+					       (append
+						(list "-c")
+						(counsel-gtags--command-options type)))
+					      ;; pipe here-on
+					      `("|"
+						,(or grep-command "grep")
+						,(format "'%s'" query)
+						"|" "cat" ;; https://stackoverflow.com/a/6550543/3637404
+						))
+					     " "))))
+			;; default to "list all object names"
+			(t
+			 (append `("global") (reverse (append
+						       (list "-c")
+						       (counsel-gtags--command-options
+							type)))))
+			)))
+    (counsel--async-command (mapconcat #'identity command-line " ")))
+  nil)
 
 (defun counsel-gtags--file-and-line (candidate)
   (if (and (counsel-gtags--windows-p)
@@ -189,17 +242,22 @@ if provided."
 
 Use TYPE ∈ '(definition reference symbol) for defining global parameters.
 If `counsel-gtags-use-input-at-point' is non-nil, will use symbol at point as
-initial input for `ivy-read'."
+initial input for `ivy-read'.
+
+You can use regular expressions that, for performance matters, will be filtered
+by `grep-command'.
+
+See `counsel-gtags--complete-candidates' for more info."
   (let ((default-val (and counsel-gtags-use-input-at-point (thing-at-point 'symbol)))
         (prompt (assoc-default type counsel-gtags--prompts)))
     (ivy-read prompt (lambda (input)
-                       (counsel-gtags--complete-candidates type input))
-              :initial-input default-val
-              :unwind (lambda ()
-                        (counsel-delete-process)
-                        (swiper--cleanup))
-              :dynamic-collection t
-              :caller 'counsel-gtags--read-tag)))
+		       (counsel-gtags--complete-candidates type input))
+	      :initial-input default-val
+	      :unwind (lambda ()
+			(counsel-delete-process)
+			(swiper--cleanup))
+	      :dynamic-collection t
+	      :caller 'counsel-gtags--read-tag)))
 
 (defun counsel-gtags--tag-directory ()
   (with-temp-buffer
