@@ -30,7 +30,9 @@
 ;;; Code:
 
 ;; See https://emacs.stackexchange.com/a/19458/10785
+(eval-when-compile (require 'cl))
 (require 'f)
+
 (require 'counsel-gtags)
 
 ;;;;;;;;;;;;;;;;;
@@ -41,9 +43,10 @@
 
 You can access the project at `default-directory', non-empty source file and
 header at `main-file-path' and `main-header-path'."
-  `(let* ((default-directory (make-temp-file
-			      "counsel-gtags-unit-test-mock-project"
-			      t))
+  `(let* ((project-path (make-temp-file
+			 "counsel-gtags-unit-test-mock-project"
+			 t))
+	  (default-directory project-path)
 	  (main-file-path (concat
 			   (file-name-as-directory
 			    default-directory)
@@ -78,7 +81,26 @@ int main{
      (f-write-text main-file-text 'utf-8 main-file-path)
      (f-write-text main-header-text 'utf-8 main-header-path)
      (call-process "gtags")
-     ,@body))
+     (save-window-excursion
+       (let ((__result ,@body))
+	 ;; clean up buffers that may have been opened in the process before
+	 ;; returning
+	 (let* ((buffers-&-paths (mapcar
+				  (lambda (buffer)
+				    (list buffer
+					  (with-current-buffer buffer
+					    (and buffer-file-name
+						 (file-name-directory buffer-file-name)))))
+				  (buffer-list)))
+		(buffers-from-project (remove-if-not
+				       (lambda (buffer-&-path)
+					 (and (stringp (cadr buffer-&-path))
+					      (string-equal (cadr buffer-&-path)
+							    project-path)))
+				       buffers-&-paths)))
+	   (dolist (buffer-&-path buffers-from-project)
+	     (kill-buffer (cadr buffer-&-path))))
+	 __result))))
 
 (ert-deftest can-create-project ()
   (should (stringp (with-mock-project
@@ -95,18 +117,18 @@ int main{
 ;;;;;;;;;;;;;;;;;
 (ert-deftest case-sensitive-as-default ()
   (should (let ((ivy-auto-select-single-candidate t))
-	    (save-window-excursion
-	      (with-mock-project
-	       (counsel-gtags-find-definition
-		"another_global_fun"))))))
+	    (with-mock-project
+	     (string-prefix-p "main.c"
+			      (counsel-gtags-find-definition
+			       "another_global_fun"))))))
 
 (ert-deftest ignore-case ()
   (should (let ((ivy-auto-select-single-candidate t)
 		(counsel-gtags-ignore-case t))
-	    (save-window-excursion
-	      (with-mock-project
-	       (counsel-gtags-find-definition
-		"ANOTHER_GLOBAL_FUN"))))))
+	    (with-mock-project
+	     (string-prefix-p "main.c"
+			      (counsel-gtags-find-definition
+			       "ANOTHER_GLOBAL_FUN"))))))
 
 (provide 'unit-tests)
 ;;; unit-tests.el ends here
