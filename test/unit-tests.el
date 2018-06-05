@@ -110,7 +110,7 @@ int main{
   "For now, we can only create tags interactively"
   (should (with-mock-project
 	   (string-equal (counsel-gtags--default-directory)
-			 default-directory))))
+			 (file-name-as-directory default-directory)))))
 
 ;;;;;;;;;;;;;;;;;
 ;; Actual testing
