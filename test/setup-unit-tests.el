@@ -1,3 +1,4 @@
+;; get needed packages for testing using straight.el
 (let ((bootstrap-file
        (expand-file-name "straight/repos/straight.el/bootstrap.el" user-emacs-directory))
       (bootstrap-version 4))
@@ -9,10 +10,12 @@
       (eval-print-last-sexp)))
   (load bootstrap-file nil 'nomessage))
 
+;; get extra needed packages
 (straight-use-package 'f)
 (straight-use-package 'counsel)
+
+;; load ../counsel-gtags.el
 (load
  (concat
   (locate-dominating-file "./" "counsel-gtags.el")
-  "counsel-gtags.el")
- )
+  "counsel-gtags.el"))

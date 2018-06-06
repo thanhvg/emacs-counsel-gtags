@@ -1,5 +1,6 @@
+# taken from https://github.com/abo-abo/tiny/blob/master/Makefile
+# see http://sachachua.com/blog/2015/02/continuous-integration-code-coverage-emacs-packages-travis-coveralls/
 emacs ?= emacs
-#BEMACS = $(emacs) -batch -l targets/elpa.el
 BEMACS = $(emacs) -batch
 
 all: test
