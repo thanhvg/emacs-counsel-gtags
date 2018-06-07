@@ -9,6 +9,8 @@ before_install:
   # Update and install the Emacs for our environment
   - sudo apt-get update -qq
   - sudo apt-get install -qq -yy ${EMACS}-nox ${EMACS}-el
+  # install global to create tags through `gtags`
+  - sudo apt-get install -qq -yy global
 
 env:
   - EMACS=emacs24
