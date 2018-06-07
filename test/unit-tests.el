@@ -113,6 +113,11 @@ int main{
    (should
     (string-equal (counsel-gtags--default-directory)
 		  (file-name-as-directory default-directory)))))
+(ert-deftest gtags-command-works ()
+  (counsel-gtags--with-mock-project
+   (should (string-equal
+	    "main.c:11:void another_global_fun(){"
+	    (s-trim (shell-command-to-string "global --result=grep another_global_fun"))))))
 
 (ert-deftest can-query ()
   "For now, we can only create tags interactively"
