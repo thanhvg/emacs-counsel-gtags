@@ -14,6 +14,7 @@
 (straight-use-package 'dash)
 (straight-use-package 'f)
 (straight-use-package 'counsel)
+(straight-use-package 's)
 
 ;; load ../counsel-gtags.el
 (load
