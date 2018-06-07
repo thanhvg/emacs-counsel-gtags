@@ -10,7 +10,8 @@
       (goto-char (point-max))
       (eval-print-last-sexp)))
   (load bootstrap-file nil 'nomessage))
-;; get extra needed packages
+;; get extra needed packages (just for testing)
+(straight-use-package 'dash)
 (straight-use-package 'f)
 (straight-use-package 'counsel)
 
