@@ -1,15 +1,15 @@
 ;; get needed packages for testing using straight.el
-(let ((bootstrap-file
+(let ((bootstrap-file ;; TODO: does anyone know how to load packages without writing to disk?
        (expand-file-name "straight/repos/straight.el/bootstrap.el" user-emacs-directory))
       (bootstrap-version 4))
   (unless (file-exists-p bootstrap-file)
-    (with-temp-buffer
-      ;; http://ergoemacs.org/emacs/elisp_read_file_content.html
-      (insert-file-contents "./straight.el/develop/install.el")
+    (with-current-buffer
+        (url-retrieve-synchronously
+         "https://raw.githubusercontent.com/raxod502/straight.el/develop/install.el"
+         'silent 'inhibit-cookies)
       (goto-char (point-max))
       (eval-print-last-sexp)))
   (load bootstrap-file nil 'nomessage))
-
 ;; get extra needed packages
 (straight-use-package 'f)
 (straight-use-package 'counsel)
