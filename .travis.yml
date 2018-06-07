@@ -13,8 +13,8 @@ before_install:
   - sudo apt-get install -qq -yy global
 
 env:
-  - EMACS=emacs24
   - EMACS=emacs-snapshot
 script:
   - $EMACS --version
+  - gtags --version
   - make test

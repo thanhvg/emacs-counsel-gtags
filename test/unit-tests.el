@@ -32,13 +32,14 @@
 ;; See https://emacs.stackexchange.com/a/19458/10785
 (eval-when-compile (require 'cl))
 (require 'f)
+(require 'dash)
 
 (require 'counsel-gtags)
 
 ;;;;;;;;;;;;;;;;;
 ;; Infrastructure
 ;;;;;;;;;;;;;;;;;
-(defmacro with-mock-project (&rest body)
+(defmacro counsel-gtags--with-mock-project (&rest body)
   "Create mock project with source file and execute BODY.
 
 You can access the project at `default-directory', non-empty source file and
@@ -103,32 +104,54 @@ int main{
 	 __result))))
 
 (ert-deftest can-create-project ()
-  (should (stringp (with-mock-project
-		    (f-read main-file-path 'utf-8)))))
+  (counsel-gtags--with-mock-project
+   (should (stringp (f-read main-file-path 'utf-8)))))
 
 (ert-deftest can-create-db-and-read-symbols ()
   "For now, we can only create tags interactively"
-  (should (with-mock-project
-	   (string-equal (counsel-gtags--default-directory)
-			 (file-name-as-directory default-directory)))))
+  (counsel-gtags--with-mock-project
+   (should
+    (string-equal (counsel-gtags--default-directory)
+		  (file-name-as-directory default-directory)))))
 
+(ert-deftest can-query ()
+  "For now, we can only create tags interactively"
+  (counsel-gtags--with-mock-project
+   (should
+    (string-equal (counsel-gtags--default-directory)
+		  (file-name-as-directory default-directory)))))
 ;;;;;;;;;;;;;;;;;
 ;; Actual testing
 ;;;;;;;;;;;;;;;;;
+(ert-deftest correct-collection-of-candidates ()
+  (counsel-gtags--with-mock-project
+   (let* ((root (counsel-gtags--default-directory))
+          (default-directory root)
+	  (type 'definition)
+	  (tagname "another_global_fun")
+          (encoding buffer-file-coding-system)
+	  (extra-options)
+	  (expected '("main.c:11:void another_global_fun(){"))
+	  (collected (counsel-gtags--collect-candidates type tagname encoding extra-options)))
+     (should
+      (-intersection collected expected)))))
+
 (ert-deftest case-sensitive-as-default ()
-  (should (let ((ivy-auto-select-single-candidate t))
-	    (with-mock-project
-	     (string-prefix-p "main.c"
-			      (counsel-gtags-find-definition
-			       "another_global_fun"))))))
+  (let ((ivy-auto-select-single-candidate t))
+    (counsel-gtags--with-mock-project
+     (should
+      (string-prefix-p "main.c"
+		       (counsel-gtags-find-definition
+			"another_global_fun"))))))
 
 (ert-deftest ignore-case ()
-  (should (let ((ivy-auto-select-single-candidate t)
-		(counsel-gtags-ignore-case t))
-	    (with-mock-project
-	     (string-prefix-p "main.c"
-			      (counsel-gtags-find-definition
-			       "ANOTHER_GLOBAL_FUN"))))))
+  (let ((ivy-auto-select-single-candidate t)
+	(counsel-gtags-ignore-case t))
+    (counsel-gtags--with-mock-project
+     (should
+      (string-prefix-p "main.c"
+		       (counsel-gtags-find-definition
+			"ANOTHER_GLOBAL_FUN"))))))
 
 (provide 'unit-tests)
 ;;; unit-tests.el ends here
