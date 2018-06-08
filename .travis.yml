@@ -2,19 +2,25 @@
 # see http://sachachua.com/blog/2015/02/continuous-integration-code-coverage-emacs-packages-travis-coveralls/
 language: emacs-lisp
 before_install:
-  # PPA for stable Emacs packages
-  - sudo add-apt-repository -y ppa:cassou/emacs
   # PPA for Emacs nightlies
   - sudo add-apt-repository -y ppa:ubuntu-elisp/ppa
   # Update and install the Emacs for our environment
   - sudo apt-get update -qq
   - sudo apt-get install -qq -yy ${EMACS}-nox ${EMACS}-el
   # install global to create tags through `gtags`
-  - sudo apt-get install -qq -yy global
+  # get `global` (trusty's version is really old)
+  - wget -qO- http://tamacom.com/global/$GLOBAL.tar.gz | tar zvxf -
+  - cd $GLOBAL
+  - sudo apt-get install -qq -yy build-essential
+  - ./configure --disable-gtagscscope --prefix=/usr
+  - make
+  - sudo make install
+  - cd -
+  # end installing global
 
 env:
-  - EMACS=emacs-snapshot
+  - EMACS=emacs-snapshot GLOBAL=global-6.6.2
 script:
   - $EMACS --version
-  - gtags --version
+  - global --version
   - make test
