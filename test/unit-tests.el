@@ -33,6 +33,7 @@
 (eval-when-compile (require 'cl))
 (require 'f)
 (require 'dash)
+(require 's)
 
 (require 'counsel-gtags)
 
@@ -103,23 +104,23 @@ int main{
 	     (kill-buffer (cadr buffer-&-path))))
 	 __result))))
 
-(ert-deftest can-create-project ()
+(ert-deftest 00-can-create-project ()
   (counsel-gtags--with-mock-project
    (should (stringp (f-read main-file-path 'utf-8)))))
 
-(ert-deftest can-create-db-and-read-symbols ()
+(ert-deftest 00-can-create-db-and-read-symbols ()
   "For now, we can only create tags interactively"
   (counsel-gtags--with-mock-project
    (should
     (string-equal (counsel-gtags--default-directory)
 		  (file-name-as-directory default-directory)))))
-(ert-deftest gtags-command-works ()
+(ert-deftest 00-gtags-command-works ()
   (counsel-gtags--with-mock-project
    (should (string-equal
 	    "main.c:11:void another_global_fun(){"
 	    (s-trim (shell-command-to-string "global --result=grep another_global_fun"))))))
 
-(ert-deftest can-query ()
+(ert-deftest 00-can-query ()
   "For now, we can only create tags interactively"
   (counsel-gtags--with-mock-project
    (should
@@ -141,7 +142,7 @@ int main{
      (should
       (-intersection collected expected)))))
 
-(ert-deftest case-sensitive-as-default ()
+(ert-deftest default-case-sensitive ()
   (let ((ivy-auto-select-single-candidate t))
     (counsel-gtags--with-mock-project
      (should
