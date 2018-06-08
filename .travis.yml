@@ -9,9 +9,9 @@ before_install:
   - sudo apt-get install -qq -yy ${EMACS}-nox ${EMACS}-el
   # install global to create tags through `gtags`
   # get `global` (trusty's version is really old)
-  - wget -qO- http://tamacom.com/global/$GLOBAL.tar.gz | tar zxf -
+  - wget -qO- http://tamacom.com/global/$GLOBAL.tar.gz | tar zvxf -
   - cd $GLOBAL
-  - sudo apt-get install -qq -yy build_essentials
+  - sudo apt-get install -qq -yy build-essential
   - ./configure --disable-gtagscscope --prefix=/usr
   - make
   - sudo make install
