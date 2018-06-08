@@ -17,8 +17,7 @@ before_install:
   - sudo make install
 
 env:
-  - EMACS=emacs-snapshot
-  - GLOBAL=global-6.6.2
+  - EMACS=emacs-snapshot GLOBAL=global-6.6.2
 script:
   - $EMACS --version
   - global --version
