@@ -160,11 +160,11 @@ This variable does not have any effect unless
 				"$" "(" ")"))
 		       s))))
 
-(defun counsel-gtags--complete-candidates (type &optional query)
-  "Gather the object names asynchronously for `ivy-read'.
+(defun counsel-gtags--build-command-for-candidates (type &optional query)
+  "Build command line for `counsel-gtags--complete-candidates'.
 
-Build global parameters according to TYPE and using QUERY
-if provided.
+Forwards TYPE and QUERY as arguments.
+
 If QUERY starts with `^',it will delegate the search to global (ie: it's faster)
 but the `^' won't be forwarded.
 Otherwise, the query will be filtered using `grep-command' (when available).
@@ -172,48 +172,56 @@ These optimization are due to global providing a \"search by prefix\" but not a
 \"search name by regex\" and that listing the database could be really slow."
   (let* ((shell-command "sh")
 	 (non-empty-query (< 1 (length query)))
-	 (command-line (cond
-			((and non-empty-query
-			      (string-prefix-p "^" query)
-			      (not (counsel-gtags--string-looks-like-regex
-				    ;; skip "^" at the beginning
-				    (substring query 1))))
-			 ;; tell global to search for prefix
-			 (append
-			  `("global")
-			  (reverse
-			   (append
-			    `(,(substring query 1) "-c")
-			    (counsel-gtags--command-options type)))))
-			((and non-empty-query
-			      (executable-find shell-command)
-			      (executable-find (or grep-command
-						   "grep")))
-			 ;; run all database, pipe with grep
-			 (list shell-command "-c"
-			       (format "\"%s\""
-				  (mapconcat #'identity
-					     (append ;; global command here
-					      `("global")
-					      (reverse
-					       (append
-						(list "-c")
-						(counsel-gtags--command-options type)))
-					      ;; pipe here-on
-					      `("|"
-						,(or grep-command "grep")
-						,(format "'%s'" query)
-						"|" "cat" ;; https://stackoverflow.com/a/6550543/3637404
-						))
-					     " "))))
-			;; default to "list all object names"
-			(t
-			 (append `("global") (reverse (append
-						       (list "-c")
-						       (counsel-gtags--command-options
-							type)))))
-			)))
-    (counsel--async-command (mapconcat #'identity command-line " ")))
+	 (gtags-options (counsel-gtags--command-options type))
+	 (command-line
+	  (cond
+	   ((and non-empty-query
+		 (string-prefix-p "^" query)
+		 (not (counsel-gtags--string-looks-like-regex
+		       ;; skip "^" at the beginning
+		       (substring query 1))))
+	    ;; tell global to search for prefix
+	    (append
+	     `("global")
+	     (reverse
+	      (append
+	       `(,(substring query 1) "-c")
+	       gtags-options))))
+	   ((and non-empty-query
+		 (executable-find shell-command)
+		 (executable-find (or grep-command
+				      "grep")))
+	    ;; run all database, pipe with grep
+	    (list shell-command "-c"
+		  (format "\"%s\""
+		     (mapconcat #'identity
+				(append ;; global command here
+				 `("global")
+				 (reverse
+				  (append
+				   (list "-c")
+				   gtags-options))
+				 ;; pipe here-on
+				 `("|"
+				   ,(or grep-command "grep")
+				   ,(format "'%s'" query)
+				   "|" "cat" ;; https://stackoverflow.com/a/6550543/3637404
+				   ))
+				" "))))
+	   ;; default to "list all object names"
+	   (t
+	    (append `("global") (reverse (append
+					  (list "-c")
+					  gtags-options)))))))
+    (mapconcat #'identity command-line " ")))
+
+(defun counsel-gtags--complete-candidates (type &optional query)
+  "Gather the object names asynchronously for `ivy-read'.
+
+Build global parameters according to TYPE and using QUERY
+if provided."
+  (counsel--async-command
+   (counsel-gtags--build-command-for-candidates type query))
   nil)
 
 (defun counsel-gtags--file-and-line (candidate)

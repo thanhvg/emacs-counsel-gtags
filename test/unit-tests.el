@@ -161,5 +161,17 @@ int main{
 		       (counsel-gtags-find-definition
 			"ANOTHER_GLOBAL_FUN"))))))
 
+(ert-deftest match_anywhere_in_symbol ()
+  "Test that we can search for a string anywhere in each candidate, not just the start.
+Should match both functions defined."
+  (counsel-gtags--with-mock-project
+   (should
+    (s-equals?
+     "another_global_fun
+global_fun
+"
+     (shell-command-to-string
+      (counsel-gtags--build-command-for-candidates 'definition "_fun"))))))
+
 (provide 'unit-tests)
 ;;; unit-tests.el ends here
