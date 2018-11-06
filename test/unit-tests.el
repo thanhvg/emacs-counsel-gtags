@@ -40,6 +40,27 @@
 ;;;;;;;;;;;;;;;;;
 ;; Infrastructure
 ;;;;;;;;;;;;;;;;;
+(defvar counsel-gtags--expr nil
+  "Holds a test expression to evaluate with `counsel-gtags--eval'.")
+
+(defvar counsel-gtags--result nil
+  "Holds the eval result of `counsel-gtags--expr' by `ivy-eval'.")
+
+(defun counsel-gtags--eval ()
+  "Evaluate `counsel-gtags--expr'."
+  (interactive)
+  (setq counsel-gtags--result (eval counsel-gtags--expr)))
+
+(global-set-key (kbd "C-c e") 'counsel-gtags--eval)
+
+(defun counsel-gtags--with (expr keys)
+  "Evaluate EXPR followed by KEYS."
+  (let ((counsel-gtags--expr expr))
+    (execute-kbd-macro
+     (vconcat (kbd "C-c e")
+              (kbd keys)))
+    counsel-gtags--result))
+
 (defmacro counsel-gtags--with-mock-project (&rest body)
   "Create mock project with source file and execute BODY.
 
@@ -160,6 +181,36 @@ int main{
       (string-prefix-p "main.c"
 		       (counsel-gtags-find-definition
 			"ANOTHER_GLOBAL_FUN"))))))
+
+(setq counsel-gtags--test-find-file-result nil)
+(defun counsel-gtags--intercept-find-file (original-fun &rest args)
+  "Intercept `find-file' & save its argument to special variable.
+
+Special variable is `counsel-gtags--test-find-file-result'.
+ORIGINAL-FUN is `find-file'; rest of arguments (ARGS) is the file."
+  (setq counsel-gtags--test-find-file-result (-first-item args)))
+(ert-deftest relative-to-project-root ()
+  "Open files correctly when relative to root."
+  (save-window-excursion
+    (advice-add 'find-file :around #'counsel-gtags--intercept-find-file)
+    (let*
+	((repo-root-path (locate-dominating-file "./" "counsel-gtags.el"))
+	 (sample-project-path (concat (file-name-as-directory repo-root-path)
+				      "test/sample-project"))
+	 (result
+	  (ggtags-with
+	   `(let ((counsel-gtags-path-style 'root)
+		  (ivy-auto-select-single-candidate t)
+		  (default-directory ,sample-project-path)
+		  ;; ↓simulate `counsel-gtags--default-directory' not being previously called
+		  (counsel-gtags--original-default-directory nil))
+	      (counsel-gtags-find-file "marichiweu.c"))
+	   "C-m"))
+	 (actual-file-path (concat (file-name-as-directory sample-project-path)
+				   "some-module/marichiweu.c")))
+      (advice-remove 'find-file #'counsel-gtags--intercept-find-file)
+      (should
+       (string-equal actual-file-path result)))))
 
 (provide 'unit-tests)
 ;;; unit-tests.el ends here
