@@ -217,6 +217,10 @@ These optimization are due to global providing a \"search by prefix\" but not a
   nil)
 
 (defun counsel-gtags--file-and-line (candidate)
+  "Return list with file and position per CANDIDATE.
+
+Candidates are supposed to be strings of the form \"file:line\" as returned by
+global. Line number is returned as number (and not string)."
   (if (and (counsel-gtags--windows-p)
            (string-match-p "\\`[a-zA-Z]:" candidate)) ;; Windows Driver letter
       (when (string-match "\\`\\([^:]+:[^:]+:\\):\\([^:]+\\)" candidate)
@@ -226,11 +230,17 @@ These optimization are due to global providing a \"search by prefix\" but not a
       (list (cl-first fields) (string-to-number (or (cl-second fields) "1"))))))
 
 (defun counsel-gtags--find-file (candidate)
+  "Open file-at-position per CANDIDATE using `find-file'.
+
+This is the `:action' callback for `ivy-read' calls."
   (with-ivy-window
     (swiper--cleanup)
-    (cl-destructuring-bind (file line) (counsel-gtags--file-and-line candidate)
+    (cl-destructuring-bind (file-path line) (counsel-gtags--file-and-line candidate)
       (counsel-gtags--push 'from)
-      (let ((default-directory counsel-gtags--original-default-directory))
+      (let ((default-directory (file-name-as-directory
+				(or counsel-gtags--original-default-directory
+				    default-directory)))
+	    (file (counsel-gtags--real-file-name file-path)))
         (find-file file)
         (goto-char (point-min))
         (forward-line (1- line))
@@ -331,6 +341,10 @@ Prompt for TAGNAME if not given."
       (match-string-no-properties 1 line))))
 
 (defun counsel-gtags--default-directory ()
+  "Return default directory per `counsel-gtags-path-style'.
+
+Useful for jumping from a location when using global commands (like with
+\"--from-here\")."
   (setq counsel-gtags--original-default-directory
         (cl-case counsel-gtags-path-style
           ((relative absolute) default-directory)
@@ -349,7 +363,7 @@ Prompt for TAGNAME if not given."
                              (root "-Poc")
                              (relative ""))))
              (unless (zerop (process-file "global" nil t nil options))
-               (error "Failed: collect file names."))
+               (error "Failed: collect file names"))
              (goto-char (point-min))
              (let (files)
                (while (not (eobp))
@@ -450,10 +464,15 @@ Prompt for ROOTDIR and LABEL if not given.  This command is asynchronous."
      (counsel-gtags--make-gtags-sentinel 'create))))
 
 (defun counsel-gtags--real-file-name (&optional fn)
-  "Return real file name for file path `FN', which defaults to current buffer's file"
+  "Return real file name for file path FN using `file-truename'.
+
+Helper function, used to determine a file name (whether relative or absolute).
+Tramp remote files are supported.
+FN defaults to current buffer's file if not provided."
   (let ((filename (or fn
                       (buffer-file-name)
-                      (error "This buffer is not related to any file."))))
+                      (error "This buffer is not related to any file")))
+	(default-directory (file-name-as-directory default-directory)))
     (if (file-remote-p filename)
         (tramp-file-name-localname (tramp-dissect-file-name filename))
       (file-truename filename))))
@@ -514,6 +533,7 @@ database in prompted directory."
           (setq counsel-gtags--last-update-time current-time))))))
 
 (defun counsel-gtags--from-here (tagname)
+  "Try to open file by querying TAGNAME and \"--from-here\"."
   (let* ((line (line-number-at-pos))
          (root (counsel-gtags--real-file-name (counsel-gtags--default-directory)))
          (file (counsel-gtags--real-file-name))

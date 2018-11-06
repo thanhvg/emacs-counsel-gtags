@@ -41,20 +41,28 @@
 ;; Infrastructure
 ;;;;;;;;;;;;;;;;;
 (defvar counsel-gtags--expr nil
-  "Holds a test expression to evaluate with `counsel-gtags--eval'.")
+  "Holds a test expression to evaluate with `counsel-gtags--eval'.
+
+Taken from ivy-tests.el")
 
 (defvar counsel-gtags--result nil
-  "Holds the eval result of `counsel-gtags--expr' by `ivy-eval'.")
+  "Holds the eval result of `counsel-gtags--expr' by `ivy-eval'.
+
+Taken from ivy-tests.el")
 
 (defun counsel-gtags--eval ()
-  "Evaluate `counsel-gtags--expr'."
+  "Evaluate `counsel-gtags--expr'.
+
+Taken from ivy-tests.el"
   (interactive)
   (setq counsel-gtags--result (eval counsel-gtags--expr)))
 
 (global-set-key (kbd "C-c e") 'counsel-gtags--eval)
 
 (defun counsel-gtags--with (expr keys)
-  "Evaluate EXPR followed by KEYS."
+  "Evaluate EXPR followed by KEYS.
+
+Taken from ivy-tests.el"
   (let ((counsel-gtags--expr expr))
     (execute-kbd-macro
      (vconcat (kbd "C-c e")
@@ -204,25 +212,30 @@ ORIGINAL-FUN is `find-file'; rest of arguments (ARGS) is the file."
 (ert-deftest relative-to-project-root ()
   "Open files correctly when relative to root."
   (save-window-excursion
-    (advice-add 'find-file :around #'counsel-gtags--intercept-find-file)
     (let*
 	((repo-root-path (locate-dominating-file "./" "counsel-gtags.el"))
 	 (sample-project-path (concat (file-name-as-directory repo-root-path)
 				      "test/sample-project/"))
-	 (returned-file-path
-	  (counsel-gtags--with
-	   `(let ((counsel-gtags-path-style 'root)
-		  (ivy-auto-select-single-candidate t)
-		  (default-directory ,sample-project-path)
-		  ;; ↓simulate `counsel-gtags--default-directory' not being previously called
-		  (counsel-gtags--original-default-directory nil))
-	      (counsel-gtags-find-file "marichiweu.c"))
-	   "C-m"))
-	 (expected-file-path (concat (file-name-as-directory sample-project-path)
-				     "some-module/marichiweu.c")))
+	 (expected-file-path (expand-file-name
+			      (concat (file-name-as-directory
+				       sample-project-path)
+				      "some-module/marichiweu.c"))))
+      (advice-add 'find-file :around #'counsel-gtags--intercept-find-file)
+      ;; ↓ sets `counsel-gtags--test-find-file-result'
+      (counsel-gtags--with
+       `(let ((counsel-gtags-path-style 'root)
+	      (ivy-auto-select-single-candidate t)
+	      (default-directory ,sample-project-path)
+	      ;; ↓simulate `counsel-gtags--default-directory' not being
+	      ;;  previously called
+	      (counsel-gtags--original-default-directory nil))
+	  (counsel-gtags-find-file "marichiweu.c"))
+       "C-m")
+      ;; ↓ `counsel-gtags--test-find-file-result' was set
       (advice-remove 'find-file #'counsel-gtags--intercept-find-file)
-      (should
-       (string-equal expected-file-path returned-file-path)))))
+      (let ((opened-file-path counsel-gtags--test-find-file-result))
+	(should
+	 (string-equal expected-file-path opened-file-path))))))
 
 (provide 'unit-tests)
 ;;; unit-tests.el ends here
