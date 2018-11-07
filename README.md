@@ -1,4 +1,4 @@
-# counsel-gtags.el [![melpa badge][melpa-badge]][melpa-link] [![melpa stable badge][melpa-stable-badge]][melpa-stable-link]
+# counsel-gtags.el [![melpa badge][melpa-badge]][melpa-link] [![melpa stable badge][melpa-stable-badge]][melpa-stable-link] [![Build Status](https://travis-ci.org/FelipeLema/emacs-counsel-gtags.svg?branch=master)](https://travis-ci.org/FelipeLema/emacs-counsel-gtags)
 
 [GNU GLOBAL](https://www.gnu.org/software/global/) interface of [ivy](https://github.com/abo-abo/swiper).
 
@@ -14,7 +14,6 @@
 - [X] Basic History command
 - [ ] History navigate command
 - [ ] Tramp support
-- [ ] Windows support
 
 ## Requirements
 
