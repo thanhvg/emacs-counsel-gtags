@@ -159,6 +159,22 @@ This variable does not have any effect unless
 	 (string-match (rx (any "." "^" "*" "+" "?" "{" "}" "[" "]"
 				"$" "(" ")"))
 		       s))))
+
+(defun counsel-gtags--get-grep-command ()
+  "Get a grep command to be used to filter candidates.
+
+Returns a command without arguments.
+
+Otherwise, returns nil if couldn't find any."
+  (let ((grep-command-or-nil )))
+  (--any ;; get any grep executable
+   (and it
+	(executable-find
+	 ;; "⎡grep⎦ -H -o -P …"
+	 (-first-item (split-string it))))
+   (list
+    grep-command "rg" "ag" "grep")))
+
 (defun counsel-gtags--build-command-to-collect-candidates (type &optional query)
   "Build command line string to gather candidates according to TYPE and QUERY.
 
@@ -166,7 +182,8 @@ Build global parameters according to TYPE and using QUERY
 if provided.
 If QUERY starts with `^',it will delegate the search to global (ie: it's faster)
 but the `^' won't be forwarded.
-Otherwise, the query will be filtered using `grep-command' (when available).
+Otherwise, the query will be filtered using a grep-like command from
+`counsel-gtags--get-grep-command' (probably `grep-command') when available.
 These optimization are due to global providing a \"search by prefix\" but not a
 \"search name by regex\" and that listing the database could be really slow."
   (let* ((shell-command "sh")
@@ -186,8 +203,7 @@ These optimization are due to global providing a \"search by prefix\" but not a
 			    (counsel-gtags--command-options type)))))
 			((and non-empty-query
 			      (executable-find shell-command)
-			      (executable-find (or grep-command
-						   "grep")))
+			      (counsel-gtags--get-grep-command))
 			 ;; run all database, pipe with grep
 			 (list shell-command "-c"
 			       (format "\"%s\""
@@ -200,7 +216,7 @@ These optimization are due to global providing a \"search by prefix\" but not a
 						(counsel-gtags--command-options type)))
 					      ;; pipe here-on
 					      `("|"
-						,(or grep-command "grep")
+						,(counsel-gtags--get-grep-command)
 						,(format "'%s'" query)
 						"|" "cat" ;; https://stackoverflow.com/a/6550543/3637404
 						))

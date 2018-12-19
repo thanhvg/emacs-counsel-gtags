@@ -260,5 +260,38 @@ tested with a call to `shell-command-to-string' and `split-string' like
      (should
       (-intersection collected expected)))))
 
+(ert-deftest get-grep-command-from-default-emacs ()
+  "get grep command even from default value that includes flags"
+  (let ((grep-commmand "grep --color -nH --null -e "))
+    (when (executable-find "grep") ;; have a grep command
+      (should
+       (not (string-empty-p (counsel-gtags--get-grep-command))))
+      (should ;; removes flags
+       (not (s-matches? (rx (* any) "--color" )
+			(counsel-gtags--get-grep-command))))))
+  (let ((grep-commmand nil))
+    (when (executable-find "grep") ;; have a grep command
+      (should
+       (not (string-empty-p (counsel-gtags--get-grep-command))))
+      (should ;; removes flags
+       (not (s-matches? (rx (* any) "--color" )
+			(counsel-gtags--get-grep-command)))))))
+
+(ert-deftest grep-candidates-command-correctly ()
+  (counsel-gtags--with-mock-project
+   (let* ((root (counsel-gtags--default-directory))
+          (default-directory root)
+	  (type 'reference)
+	  (tagname "another_global_fun")
+	  ;; we're testing we _can_ *ONLY* reach this symbol
+	  (expected '("another_global_fun"))
+	  (command-line (counsel-gtags--build-command-to-collect-candidates
+			 type tagname))
+	  ;;         ↓ simulate `counsel--async-command' inside `counsel-gtags--complete-candidates'
+	  (collected (split-string (shell-command-to-string
+				    command-line))))
+     (should
+      (equal collected expected)))))
+
 (provide 'unit-tests)
 ;;; unit-tests.el ends here
