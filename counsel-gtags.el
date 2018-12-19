@@ -159,9 +159,8 @@ This variable does not have any effect unless
 	 (string-match (rx (any "." "^" "*" "+" "?" "{" "}" "[" "]"
 				"$" "(" ")"))
 		       s))))
-
-(defun counsel-gtags--complete-candidates (type &optional query)
-  "Gather the object names asynchronously for `ivy-read'.
+(defun counsel-gtags--build-command-to-collect-candidates (type &optional query)
+  "Build command line string to gather candidates according to TYPE and QUERY.
 
 Build global parameters according to TYPE and using QUERY
 if provided.
@@ -211,9 +210,17 @@ These optimization are due to global providing a \"search by prefix\" but not a
 			 (append `("global") (reverse (append
 						       (list "-c")
 						       (counsel-gtags--command-options
-							type)))))
-			)))
-    (counsel--async-command (mapconcat #'identity command-line " ")))
+							type))))))))
+    (mapconcat #'identity command-line " ")))
+
+(defun counsel-gtags--complete-candidates (type &optional query)
+  "Gather the object names asynchronously for `ivy-read'.
+
+Gets the command line from `counsel-gtags--build-command-to-collect-candidates'
+by forwarding TYPE and QUERY."
+  (counsel--async-command (counsel-gtags--build-command-to-collect-candidates
+			   type query))
+  ;; ↓ ensure nil output of this function
   nil)
 
 (defun counsel-gtags--file-and-line (candidate)
@@ -257,8 +264,11 @@ initial input for `ivy-read'.
 You can use regular expressions that, for performance matters, will be filtered
 by `grep-command'.
 
+TYPE ∈ `counsel-gtags--prompts'
+
 See `counsel-gtags--complete-candidates' for more info."
-  (let ((default-val (and counsel-gtags-use-input-at-point (thing-at-point 'symbol)))
+  (let ((default-val (and counsel-gtags-use-input-at-point
+			  (thing-at-point 'symbol)))
         (prompt (assoc-default type counsel-gtags--prompts)))
     (ivy-read prompt (lambda (input)
 		       (counsel-gtags--complete-candidates type input))

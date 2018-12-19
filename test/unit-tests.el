@@ -209,6 +209,7 @@ int main{
 Special variable is `counsel-gtags--test-find-file-result'.
 ORIGINAL-FUN is `find-file'; rest of arguments (ARGS) is the file."
   (setq counsel-gtags--test-find-file-result (-first-item args)))
+
 (ert-deftest relative-to-project-root ()
   "Open files correctly when relative to root."
   (save-window-excursion
@@ -236,6 +237,28 @@ ORIGINAL-FUN is `find-file'; rest of arguments (ARGS) is the file."
       (let ((opened-file-path counsel-gtags--test-find-file-result))
 	(should
 	 (string-equal expected-file-path opened-file-path))))))
+
+(ert-deftest correct-collection-of-candidates-when-calling-interactively ()
+  "Not actually an interactive call, but test the command line being built.
+
+Ivy documentation mentions that any call to `counsel--async-command' can be
+tested with a call to `shell-command-to-string' and `split-string' like
+
+(split-string (shell-command-to-string …))."
+  (counsel-gtags--with-mock-project
+   (let* ((root (counsel-gtags--default-directory))
+          (default-directory root)
+	  (type 'reference)
+	  (tagname "another_global_fun")
+	  ;; we're testing we _can_ reach this symbol, not it's not exclusive
+	  (expected '("another_global_fun"))
+	  (command-line (counsel-gtags--build-command-to-collect-candidates
+			 type tagname))
+	  ;;         ↓ simulate `counsel--async-command' inside `counsel-gtags--complete-candidates'
+	  (collected (split-string (shell-command-to-string
+				    command-line))))
+     (should
+      (-intersection collected expected)))))
 
 (provide 'unit-tests)
 ;;; unit-tests.el ends here
