@@ -107,12 +107,14 @@ This variable does not have any effect unless
   "Last `default-directory' where command is invoked.")
 
 (defun counsel-gtags--select-gtags-label ()
+  "Get label from user to be used to generate tags."
   (let ((labels '("default" "native" "ctags" "pygments")))
     (ivy-read "GTAGSLABEL(Default: default): " labels)))
 
 (defun counsel-gtags--generate-tags ()
+  "Query user for tag generation and do so if accepted."
   (if (not (yes-or-no-p "File GTAGS not found. Run 'gtags'? "))
-      (error "Abort generating tag files.")
+      (error "Abort generating tag files")
     (let* ((root (read-directory-name "Root Directory: "))
            (label (counsel-gtags--select-gtags-label))
            (default-directory root))
@@ -123,11 +125,15 @@ This variable does not have any effect unless
       root)))
 
 (defun counsel-gtags--root ()
+  "Get gtags root by looking at env vars or looking for GTAGS.
+
+Will trigger tags generation if not found."
   (or (getenv "GTAGSROOT")
       (locate-dominating-file default-directory "GTAGS")
       (counsel-gtags--generate-tags)))
 
 (defsubst counsel-gtags--windows-p ()
+  "Whether we're inside non-free Gates OS."
   (memq system-type '(windows-nt ms-dos)))
 
 (defun counsel-gtags--set-absolute-option-p ()
@@ -136,6 +142,9 @@ This variable does not have any effect unless
            (getenv "GTAGSLIBPATH"))))
 
 (defun counsel-gtags--command-options (type &optional extra-options)
+  "Get list with options for global command according to TYPE.
+
+Prepend EXTRA-OPTIONS."
   (let ((options '("--result=grep")))
     (when extra-options
       (setq options (append extra-options options)))
