@@ -300,7 +300,7 @@ This is the `:action' callback for `ivy-read' calls."
 				(or counsel-gtags--original-default-directory
 				    default-directory)))
 	    (file (counsel-gtags--resolve-actual-file-from file-path)
-		  ;;(counsel-gtags--real-file-name file-path)
+		  ;;(counsel-gtags--real-file-name file-path) TODO remove this by 2020-12-24 
 		  ))
 	(find-file file)
 	;; position correctly within the file

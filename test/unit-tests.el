@@ -208,25 +208,25 @@ No queries to global involved."
     (should (string-equal
 	     expected-file-path resolved-file-path))))
 
-;;(ert-deftest file-path-results ()
-;;  "Handling of results for file queries (global … -P …).
-;;
-;;All file candidates"
-;;  (let* ((counsel-gtags-path-style 'root)
-;;	 (repo-root-path (locate-dominating-file "./" "counsel-gtags.el"))
-;;	 (sample-project-path (concat (file-name-as-directory repo-root-path)
-;;				      "test/sample-project"))
-;;	 ;; use other-module as current directory
-;;	 (default-directory (file-name-as-directory
-;;			     (concat (file-name-as-directory sample-project-path)
-;;				     "other-module")))
-;;	 (candidates (counsel-gtags--get-files))
-;;	 (actual-path-per-candidate (--map (counsel-gtags--resolve-actual-file-from it)
-;;					   candidates))
-;;	 (each-candidate-exist (-map #'file-exists-p actual-path-per-candidate)))
-;;    (should
-;;     (--all? it
-;;	     each-candidate-exist))))
+(ert-deftest file-path-results ()
+  "Handling of results for file queries (global … -P …).
+
+All file candidates"
+  (let* ((counsel-gtags-path-style 'root)
+	 (repo-root-path (locate-dominating-file "./" "counsel-gtags.el"))
+	 (sample-project-path (concat (file-name-as-directory repo-root-path)
+				      "test/sample-project"))
+	 ;; use other-module as current directory
+	 (default-directory (file-name-as-directory
+			     (concat (file-name-as-directory sample-project-path)
+				     "other-module")))
+	 (candidates (counsel-gtags--get-files))
+	 (actual-path-per-candidate (--map (counsel-gtags--resolve-actual-file-from it)
+					   candidates))
+	 (each-candidate-exist (-map #'file-exists-p actual-path-per-candidate)))
+    (should
+     (--all? it
+	     each-candidate-exist))))
 
 (setq counsel-gtags--test-find-file-result nil)
 (defun counsel-gtags--intercept-find-file (original-fun &rest args)
