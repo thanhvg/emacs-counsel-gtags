@@ -146,7 +146,7 @@ Kept free of whitespaces."
 	(symbol-name counsel-gtags-path-style))
        ('root "through")
        (_
-	(error "unexpected counsel-gtags-path-style: %s"
+	(error "Unexpected counsel-gtags-path-style: %s"
 	       (symbol-name counsel-gtags-path-style))))))
 
 (defun counsel-gtags--command-options (type &optional extra-options)
@@ -223,20 +223,20 @@ These optimization are due to global providing a \"search by prefix\" but not a
 			 ;; run all database, pipe with grep
 			 (list shell-command "-c"
 			       (format "\"%s\""
-				  (mapconcat #'identity
-					     (append ;; global command here
-					      `("global")
-					      (reverse
-					       (append
-						(list "-c")
-						(counsel-gtags--command-options type)))
-					      ;; pipe here-on
-					      `("|"
-						,(counsel-gtags--get-grep-command)
-						,(format "'%s'" query)
-						"|" "cat" ;; https://stackoverflow.com/a/6550543/3637404
-						))
-					     " "))))
+				       (mapconcat #'identity
+						  (append ;; global command here
+						   `("global")
+						   (reverse
+						    (append
+						     (list "-c")
+						     (counsel-gtags--command-options type)))
+						   ;; pipe here-on
+						   `("|"
+						     ,(counsel-gtags--get-grep-command)
+						     ,(format "'%s'" query)
+						     "|" "cat" ;; https://stackoverflow.com/a/6550543/3637404
+						     ))
+						  " "))))
 			;; default to "list all object names"
 			(t
 			 (append `("global") (reverse (append
@@ -268,6 +268,25 @@ global. Line number is returned as number (and not string)."
     (let ((fields (split-string candidate ":")))
       (list (cl-first fields) (string-to-number (or (cl-second fields) "1"))))))
 
+(defun counsel-gtags--resolve-actual-file-from (file-candidate)
+  "Resolve actual file path from CANDIDATE taken from a global cmd query.
+
+Note: candidates are handled as ⎡file:location⎦ and ⎡(file . location)⎦.
+     FILE-CANDIDATE is supposed to be *only* the file part of a candidate."
+  (let ((file-path-per-style (concat
+			      (pcase counsel-gtags-path-style
+				((or 'relative 'absolute)
+				 "")
+				(`root
+				 (file-name-as-directory
+				  (counsel-gtags--default-directory)))
+				(_
+				 (error
+				  "Unexpected counsel-gtags-path-style: %s"
+				  (symbol-name counsel-gtags-path-style))))
+			      file-candidate)))
+    (counsel-gtags--real-file-name file-path-per-style)))
+
 (defun counsel-gtags--find-file (candidate)
   "Open file-at-position per CANDIDATE using `find-file'.
 
@@ -279,11 +298,13 @@ This is the `:action' callback for `ivy-read' calls."
       (let ((default-directory (file-name-as-directory
 				(or counsel-gtags--original-default-directory
 				    default-directory)))
-	    (file (counsel-gtags--real-file-name file-path)))
-        (find-file file)
-        (goto-char (point-min))
-        (forward-line (1- line))
-        (back-to-indentation))
+	    (file ;;(counsel-gtags--resolve-actual-file-from file-path)
+	     (counsel-gtags--real-file-name file-path)))
+	(find-file file)
+	;; position correctly within the file
+	(goto-char (point-min))
+	(forward-line (1- line))
+	(back-to-indentation))
       (counsel-gtags--push 'to))))
 
 (defun counsel-gtags--read-tag (type)
@@ -324,10 +345,18 @@ See `counsel-gtags--complete-candidates' for more info."
                                       dir)))))))
 
 (defun counsel-gtags--collect-candidates (type tagname encoding extra-options)
+  "Collect lines for ⎡global …⎦ using TAGNAME as query.
+
+Use TYPE to specify query type (tag, file).
+Use ENCODING to specify encoding.
+Use EXTRA-OPTIONS to specify encoding.
+
+This is for internal use and not for final user."
   (let ((options (counsel-gtags--command-options type extra-options))
         (default-directory default-directory)
         (coding-system-for-read encoding)
         (coding-system-for-write encoding))
+    ;; TODO: handle non-zero return from ⎡global⎦ 
     (apply #'process-lines "global" (append (reverse options) (list tagname)))))
 
 (defun counsel-gtags--select-file (type tagname &optional extra-options auto-select-only-candidate)
@@ -396,7 +425,9 @@ Useful for jumping from a location when using global commands (like with
 (defun counsel-gtags--get-files (&optional query)
   "Get files that match QUERY.
 
-See `counsel-gtags-find-file'."
+See `counsel-gtags-find-file'.
+TODO: how is this different from `counsel-gtags--collect-candidates'.
+"
   ;; TODO: handle non-zero return from ⎡global⎦ 
   (split-string
    (shell-command-to-string
