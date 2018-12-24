@@ -194,19 +194,45 @@ int main{
 			"ANOTHER_GLOBAL_FUN"))))))
 
 (ert-deftest file-path-resolution ()
-  (let ((repo-root-path (locate-dominating-file "./" "counsel-gtags.el")))
-    (let* ((sample-project-path (concat (file-name-as-directory repo-root-path)
-					"test/sample-project"))
-	   (expected-file-path (expand-file-name
-				(concat (file-name-as-directory sample-project-path)
-					"some-module/marichiweu.c")))
-	   (default-directory (file-name-as-directory sample-project-path))
-	   (resolved-file-path (counsel-gtags--real-file-name "some-module/marichiweu.c")))
-      (should (string-equal
-	       expected-file-path resolved-file-path))
-      )
-    ;; TODO: add here 
-    ))
+  "`counsel-gtags--real-file-name' resolves file paths correctly.
+
+No queries to global involved."
+  (let* ((repo-root-path (locate-dominating-file "./" "counsel-gtags.el"))
+	 (sample-project-path (concat (file-name-as-directory repo-root-path)
+				      "test/sample-project"))
+	 (expected-file-path (expand-file-name
+			      (concat (file-name-as-directory sample-project-path)
+				      "some-module/marichiweu.c")))
+	 (default-directory (file-name-as-directory sample-project-path))
+	 (resolved-file-path (counsel-gtags--real-file-name "some-module/marichiweu.c")))
+    (should (string-equal
+	     expected-file-path resolved-file-path))))
+
+(ert-deftest file-path-results ()
+  "Handling of results for file queries (global … -P …).
+
+All file candidates"
+  (let* ((repo-root-path (locate-dominating-file "./" "counsel-gtags.el"))
+	 (sample-project-path (concat (file-name-as-directory repo-root-path)
+				      "test/sample-project"))
+	 
+	 ;; use other-module as current directory
+	 (default-directory (file-name-as-directory
+			     (concat (file-name-as-directory sample-project-path)
+				     "other-module")))
+	 (counsel-gtags-path-style 'root)
+	 (candidates (counsel-gtags--get-files)))
+    (should
+     (--all? it ;; all f
+	     (--map
+	      ;; ↓ imitate `counsel-gtags--select-file'
+	      (let ((default-directory (file-name-as-directory
+					(or counsel-gtags--original-default-directory
+					    default-directory)))
+		    (file (counsel-gtags--real-file-name it)))
+		;; ↑ imitate `counsel-gtags--select-file'
+		(file-exists-p it))
+	      candidates)))))
 
 (setq counsel-gtags--test-find-file-result nil)
 (defun counsel-gtags--intercept-find-file (original-fun &rest args)

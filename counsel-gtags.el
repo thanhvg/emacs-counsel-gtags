@@ -137,7 +137,9 @@ Will trigger tags generation if not found."
   (memq system-type '(windows-nt ms-dos)))
 
 (defun counsel-gtags--file-path-style ()
-  "Return current `counsel-gtags-path-style' option as argument to global command."
+  "Return current `counsel-gtags-path-style' option as argument to global cmd.
+
+Kept free of whitespaces."
   (format "--path-style=%s"
      (pcase counsel-gtags-path-style
        ((or 'relative 'absolute)
@@ -333,6 +335,7 @@ See `counsel-gtags--complete-candidates' for more info."
 
 Use TYPE ∈ '(definition reference symbol) for defining global parameters.
 Use TAGNAME for global query.
+Use AUTO-SELECT-ONLY-CANDIDATE to skip `ivy-read' if have a single candidate.
 Extra command line parameters to global are forwarded through EXTRA-OPTIONS."
   (let* ((root (counsel-gtags--default-directory))
          (encoding buffer-file-coding-system)
@@ -390,26 +393,29 @@ Useful for jumping from a location when using global commands (like with
           ((relative absolute) default-directory)
           (root (counsel-gtags--root)))))
 
+(defun counsel-gtags--get-files (&optional query)
+  "Get files that match QUERY.
+
+See `counsel-gtags-find-file'."
+  ;; TODO: handle non-zero return from ⎡global⎦ 
+  (split-string
+   (shell-command-to-string
+    (let ((query-as-string (or (and query
+				    (format "'%s'" query)) ;; ⎡'…'⎦
+			       "")))
+      (format "global %s -P %s" (counsel-gtags--file-path-style)
+	 query-as-string)))
+   (rx "\n") ;; split *only* on newlines
+   t ;; omit nulls
+   ))
+
 ;;;###autoload
 (defun counsel-gtags-find-file (&optional filename)
   "Search/narrow for FILENAME among tagged files."
   (interactive)
   (let ((default-file (or filename
                           (counsel-gtags--include-file)))
-        (candidates
-         (with-temp-buffer
-           (let* ((options (cl-case counsel-gtags-path-style
-                             (absolute "-Poa")
-                             (root "-Poc")
-                             (relative ""))))
-             (unless (zerop (process-file "global" nil t nil options))
-               (error "Failed: collect file names"))
-             (goto-char (point-min))
-             (let (files)
-               (while (not (eobp))
-                 (push (buffer-substring-no-properties (point) (line-end-position)) files)
-                 (forward-line 1))
-               (reverse files))))))
+        (candidates (counsel-gtags--get-files)))
     (ivy-read "Find File: " candidates
               :initial-input default-file
               :action #'counsel-gtags--find-file
