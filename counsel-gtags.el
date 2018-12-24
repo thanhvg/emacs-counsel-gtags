@@ -136,10 +136,16 @@ Will trigger tags generation if not found."
   "Whether we're inside non-free Gates OS."
   (memq system-type '(windows-nt ms-dos)))
 
-(defun counsel-gtags--set-absolute-option-p ()
-  (or (eq counsel-gtags-path-style 'absolute)
-      (and (counsel-gtags--windows-p)
-           (getenv "GTAGSLIBPATH"))))
+(defun counsel-gtags--file-path-style ()
+  "Return current `counsel-gtags-path-style' option as argument to global command."
+  (format "--path-style=%s"
+     (pcase counsel-gtags-path-style
+       ((or 'relative 'absolute)
+	(symbol-name counsel-gtags-path-style))
+       ('root "through")
+       (_
+	(error "unexpected counsel-gtags-path-style: %s"
+	       (symbol-name counsel-gtags-path-style))))))
 
 (defun counsel-gtags--command-options (type &optional extra-options)
   "Get list with options for global command according to TYPE.
@@ -151,8 +157,7 @@ Prepend EXTRA-OPTIONS."
     (let ((opt (assoc-default type counsel-gtags--complete-options)))
       (when opt
         (push opt options)))
-    (when (counsel-gtags--set-absolute-option-p)
-      (push "-a" options))
+    (push (counsel-gtags--file-path-style) options)
     (when counsel-gtags-ignore-case
       (push "-i" options))
     (when current-prefix-arg ;; XXX
@@ -387,7 +392,7 @@ Useful for jumping from a location when using global commands (like with
 
 ;;;###autoload
 (defun counsel-gtags-find-file (&optional filename)
-  "Search for FILENAME among tagged files."
+  "Search/narrow for FILENAME among tagged files."
   (interactive)
   (let ((default-file (or filename
                           (counsel-gtags--include-file)))

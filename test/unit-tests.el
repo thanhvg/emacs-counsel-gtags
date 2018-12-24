@@ -162,45 +162,51 @@ int main{
 ;;;;;;;;;;;;;;;;;
 (ert-deftest correct-collection-of-candidates ()
   (counsel-gtags--with-mock-project
-   (let* ((root (counsel-gtags--default-directory))
+   (let* ((counsel-gtags-path-style 'root)
+	  (root (counsel-gtags--default-directory))
           (default-directory root)
 	  (type 'definition)
 	  (tagname "another_global_fun")
           (encoding buffer-file-coding-system)
 	  (extra-options)
-	  (expected '("main.c:11:void another_global_fun(){"))
+	  (expected '("./main.c:11:void another_global_fun(){"))
 	  (collected (counsel-gtags--collect-candidates type tagname encoding extra-options)))
      (should
       (-intersection collected expected)))))
 
 (ert-deftest default-case-sensitive ()
-  (let ((ivy-auto-select-single-candidate t))
+  (let ((ivy-auto-select-single-candidate t)
+	(counsel-gtags-path-style 'root))
     (counsel-gtags--with-mock-project
      (should
-      (string-prefix-p "main.c"
+      (string-prefix-p "./main.c"
 		       (counsel-gtags-find-definition
 			"another_global_fun"))))))
 
 (ert-deftest ignore-case ()
-  (let ((ivy-auto-select-single-candidate t)
+  (let ((counsel-gtags-path-style 'root)
+	(ivy-auto-select-single-candidate t)
 	(counsel-gtags-ignore-case t))
     (counsel-gtags--with-mock-project
      (should
-      (string-prefix-p "main.c"
+      (string-prefix-p "./main.c"
 		       (counsel-gtags-find-definition
 			"ANOTHER_GLOBAL_FUN"))))))
 
 (ert-deftest file-path-resolution ()
-  (let* ((repo-root-path (locate-dominating-file "./" "counsel-gtags.el"))
-	 (sample-project-path (concat (file-name-as-directory repo-root-path)
-				      "test/sample-project"))
-	 (expected-file-path (expand-file-name
-			      (concat (file-name-as-directory sample-project-path)
-				      "some-module/marichiweu.c")))
-	 (default-directory (file-name-as-directory sample-project-path))
-	 (resolved-file-path (counsel-gtags--real-file-name "some-module/marichiweu.c")))
-    (should (string-equal
-	     expected-file-path resolved-file-path))))
+  (let ((repo-root-path (locate-dominating-file "./" "counsel-gtags.el")))
+    (let* ((sample-project-path (concat (file-name-as-directory repo-root-path)
+					"test/sample-project"))
+	   (expected-file-path (expand-file-name
+				(concat (file-name-as-directory sample-project-path)
+					"some-module/marichiweu.c")))
+	   (default-directory (file-name-as-directory sample-project-path))
+	   (resolved-file-path (counsel-gtags--real-file-name "some-module/marichiweu.c")))
+      (should (string-equal
+	       expected-file-path resolved-file-path))
+      )
+    ;; TODO: add here 
+    ))
 
 (setq counsel-gtags--test-find-file-result nil)
 (defun counsel-gtags--intercept-find-file (original-fun &rest args)
