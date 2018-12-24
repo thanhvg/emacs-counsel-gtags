@@ -176,20 +176,20 @@ int main{
 
 (ert-deftest default-case-sensitive ()
   (let ((ivy-auto-select-single-candidate t)
-	(counsel-gtags-path-style 'root))
+	(counsel-gtags-path-style 'relative))
     (counsel-gtags--with-mock-project
      (should
-      (string-prefix-p "./main.c"
+      (string-prefix-p "main.c"
 		       (counsel-gtags-find-definition
 			"another_global_fun"))))))
 
 (ert-deftest ignore-case ()
-  (let ((counsel-gtags-path-style 'root)
+  (let ((counsel-gtags-path-style 'relative)
 	(ivy-auto-select-single-candidate t)
 	(counsel-gtags-ignore-case t))
     (counsel-gtags--with-mock-project
      (should
-      (string-prefix-p "./main.c"
+      (string-prefix-p "main.c"
 		       (counsel-gtags-find-definition
 			"ANOTHER_GLOBAL_FUN"))))))
 

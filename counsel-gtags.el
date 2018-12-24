@@ -273,18 +273,19 @@ global. Line number is returned as number (and not string)."
 
 Note: candidates are handled as ⎡file:location⎦ and ⎡(file . location)⎦.
      FILE-CANDIDATE is supposed to be *only* the file part of a candidate."
-  (let ((file-path-per-style (concat
-			      (pcase counsel-gtags-path-style
-				((or 'relative 'absolute)
-				 "")
-				(`root
-				 (file-name-as-directory
-				  (counsel-gtags--default-directory)))
-				(_
-				 (error
-				  "Unexpected counsel-gtags-path-style: %s"
-				  (symbol-name counsel-gtags-path-style))))
-			      file-candidate)))
+  (let ((file-path-per-style
+	 (concat
+	  (pcase counsel-gtags-path-style
+	    ((or 'relative 'absolute)
+	     "")
+	    ('root
+	     (file-name-as-directory
+	      (counsel-gtags--default-directory)))
+	    (_
+	     (error
+	      "Unexpected counsel-gtags-path-style: %s"
+	      (symbol-name counsel-gtags-path-style))))
+	  file-candidate)))
     (counsel-gtags--real-file-name file-path-per-style)))
 
 (defun counsel-gtags--find-file (candidate)
@@ -298,8 +299,9 @@ This is the `:action' callback for `ivy-read' calls."
       (let ((default-directory (file-name-as-directory
 				(or counsel-gtags--original-default-directory
 				    default-directory)))
-	    (file ;;(counsel-gtags--resolve-actual-file-from file-path)
-	     (counsel-gtags--real-file-name file-path)))
+	    (file (counsel-gtags--resolve-actual-file-from file-path)
+		  ;;(counsel-gtags--real-file-name file-path)
+		  ))
 	(find-file file)
 	;; position correctly within the file
 	(goto-char (point-min))
