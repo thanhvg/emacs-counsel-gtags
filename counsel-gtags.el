@@ -96,9 +96,10 @@ This variable does not have any effect unless
     (symbol     . "Find Symbol: ")))
 
 (defconst counsel-gtags--complete-options
-  '((reference . "-r")
-    (symbol    . "-s")
-    (pattern   . "-g")))
+  '((file      . "-P")
+    (pattern   . "-g")
+    (reference . "-r")
+    (symbol    . "-s")))
 
 (defvar counsel-gtags--last-update-time 0)
 (defvar counsel-gtags--context nil)
@@ -294,13 +295,13 @@ Note: candidates are handled as ⎡file:location⎦ and ⎡(file . location)⎦.
 This is the `:action' callback for `ivy-read' calls."
   (with-ivy-window
     (swiper--cleanup)
-    (cl-destructuring-bind (file-path line) (counsel-gtags--file-and-line candidate)
+    (multiple-value-bind (file-path line) (counsel-gtags--file-and-line candidate)
       (counsel-gtags--push 'from)
       (let ((default-directory (file-name-as-directory
 				(or counsel-gtags--original-default-directory
 				    default-directory)))
 	    (file (counsel-gtags--resolve-actual-file-from file-path)
-		  ;;(counsel-gtags--real-file-name file-path) TODO remove this by 2020-12-24 
+		  ;;(counsel-gtags--real-file-name file-path) TODO remove this by 2020-12-24
 		  ))
 	(find-file file)
 	;; position correctly within the file
@@ -349,17 +350,22 @@ See `counsel-gtags--complete-candidates' for more info."
 (defun counsel-gtags--collect-candidates (type tagname encoding extra-options)
   "Collect lines for ⎡global …⎦ using TAGNAME as query.
 
+TAGNAME may be nil, suggesting a match-any query.
 Use TYPE to specify query type (tag, file).
 Use ENCODING to specify encoding.
 Use EXTRA-OPTIONS to specify encoding.
 
 This is for internal use and not for final user."
-  (let ((options (counsel-gtags--command-options type extra-options))
-        (default-directory default-directory)
-        (coding-system-for-read encoding)
-        (coding-system-for-write encoding))
-    ;; TODO: handle non-zero return from ⎡global⎦ 
-    (apply #'process-lines "global" (append (reverse options) (list tagname)))))
+  (let* ((options (counsel-gtags--command-options type extra-options))
+         (default-directory default-directory)
+         (coding-system-for-read encoding)
+         (coding-system-for-write encoding)
+	 (query-as-list (pcase tagname
+			  ((pred null) '())
+			  ("" '())
+			  (_ (list tagname))))
+	 (global-args (append (reverse options) query-as-list)))
+    (apply #'process-lines "global" global-args)))
 
 (defun counsel-gtags--select-file (type tagname &optional extra-options auto-select-only-candidate)
   "Prompt the user to select a file_path:position according to query.
@@ -409,6 +415,7 @@ Prompt for TAGNAME if not given."
   "\\`\\s-*#\\(?:include\\|import\\)\\s-*[\"<]\\(?:[./]*\\)?\\(.*?\\)[\">]")
 
 (defun counsel-gtags--include-file ()
+  "Get ⎡#include …⎦ from first line."
   (let ((line (buffer-substring-no-properties
                (line-beginning-position) (line-end-position))))
     (when (string-match counsel-gtags--include-regexp line)
@@ -424,31 +431,27 @@ Useful for jumping from a location when using global commands (like with
           ((relative absolute) default-directory)
           (root (counsel-gtags--root)))))
 
-(defun counsel-gtags--get-files (&optional query)
-  "Get files that match QUERY.
-
-See `counsel-gtags-find-file'.
-TODO: how is this different from `counsel-gtags--collect-candidates'.
-"
-  ;; TODO: handle non-zero return from ⎡global⎦ 
-  (split-string
-   (shell-command-to-string
-    (let ((query-as-string (or (and query
-				    (format "'%s'" query)) ;; ⎡'…'⎦
-			       "")))
-      (format "global %s -P %s" (counsel-gtags--file-path-style)
-	 query-as-string)))
-   (rx "\n") ;; split *only* on newlines
-   t ;; omit nulls
-   ))
+(defun counsel-gtags--get-files ()
+  "Get a list of all files from global."
+  (let* ((encoding buffer-file-coding-system)
+	 (candidates (counsel-gtags--collect-candidates
+		      'file
+		      nil ;; match any
+		      encoding
+		      nil))
+	 (files (mapcar (lambda (candidate)
+			  (multiple-value-bind (file-path line)
+			      (counsel-gtags--file-and-line candidate)
+			    file-path)) candidates)))
+    files))
 
 ;;;###autoload
 (defun counsel-gtags-find-file (&optional filename)
   "Search/narrow for FILENAME among tagged files."
   (interactive)
-  (let ((default-file (or filename
-                          (counsel-gtags--include-file)))
-        (candidates (counsel-gtags--get-files)))
+  (let* ((default-file (or filename
+                           (counsel-gtags--include-file)))
+         (candidates (counsel-gtags--get-files)))
     (ivy-read "Find File: " candidates
               :initial-input default-file
               :action #'counsel-gtags--find-file

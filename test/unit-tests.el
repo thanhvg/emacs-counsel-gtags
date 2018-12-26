@@ -220,13 +220,16 @@ All file candidates"
 	 (default-directory (file-name-as-directory
 			     (concat (file-name-as-directory sample-project-path)
 				     "other-module")))
-	 (candidates (counsel-gtags--get-files))
-	 (actual-path-per-candidate (--map (counsel-gtags--resolve-actual-file-from it)
-					   candidates))
-	 (each-candidate-exist (-map #'file-exists-p actual-path-per-candidate)))
-    (should
-     (--all? it
-	     each-candidate-exist))))
+         (encoding (or buffer-file-coding-system
+		       "utf-8-unix")))
+    (should encoding)
+    (let* ((candidates (counsel-gtags--get-files))
+	   (actual-path-per-candidate (--map (counsel-gtags--resolve-actual-file-from it)
+					     candidates))
+	   (each-candidate-exist (-map #'file-exists-p actual-path-per-candidate)))
+      (should
+       (--all? it
+	       each-candidate-exist)))))
 
 (setq counsel-gtags--test-find-file-result nil)
 (defun counsel-gtags--intercept-find-file (original-fun &rest args)
