@@ -222,22 +222,23 @@ These optimization are due to global providing a \"search by prefix\" but not a
 			      (executable-find shell-command)
 			      (counsel-gtags--get-grep-command))
 			 ;; run all database, pipe with grep
-			 (list shell-command "-c"
-			       (format "\"%s\""
-				       (mapconcat #'identity
-						  (append ;; global command here
-						   `("global")
-						   (reverse
-						    (append
-						     (list "-c")
-						     (counsel-gtags--command-options type)))
-						   ;; pipe here-on
-						   `("|"
-						     ,(counsel-gtags--get-grep-command)
-						     ,(format "'%s'" query)
-						     "|" "cat" ;; https://stackoverflow.com/a/6550543/3637404
-						     ))
-						  " "))))
+			 (let* ((global-cmd-list (append
+						  `("global")
+						  (reverse
+						   (append
+						    (list "-c")
+						    (counsel-gtags--command-options type)))))
+				(grep-cmd-list (list
+						(counsel-gtags--get-grep-command)
+						(shell-quote-argument query)))
+				(shell-cmd-list (append
+						 global-cmd-list
+						 `("|")
+						 grep-cmd-list
+						 `("|" "cat"))) ;; https://stackoverflow.com/a/6550543/3637404
+				(shell-cmd-string (format "\"%s\""
+						     (mapconcat #'identity shell-cmd-list " "))))
+			   (list shell-command "-c" shell-cmd-string)))
 			;; default to "list all object names"
 			(t
 			 (append `("global") (reverse (append
