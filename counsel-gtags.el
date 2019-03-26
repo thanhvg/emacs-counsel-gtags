@@ -83,10 +83,10 @@ This variable does not have any effect unless
 `counsel-gtags-use-suggested-key-map' is non-nil."
   :type 'string)
 
+(defvaralias 'counsel-gtags-suggested-key-mapping 'counsel-gtags-use-suggested-key-map)
 (defcustom counsel-gtags-use-suggested-key-map nil
   "Whether to use the suggested key bindings."
   :type 'boolean)
-(defvaralias 'counsel-gtags-suggested-key-mapping 'counsel-gtags-use-suggested-key-map)
 (make-obsolete-variable 'counsel-gtags-suggested-key-mapping 'counsel-gtags-use-suggested-key-map "0.01")
 
 (defconst counsel-gtags--prompts
@@ -183,14 +183,14 @@ Prepend EXTRA-OPTIONS."
 Returns a command without arguments.
 
 Otherwise, returns nil if couldn't find any."
-  (let ((grep-command-or-nil )))
-  (--any ;; get any grep executable
-   (and it
-	(executable-find
-	 ;; "⎡grep⎦ -H -o -P …"
-	 (-first-item (split-string it))))
-   (list
-    grep-command "rg" "ag" "grep")))
+  (cl-loop
+   for command in (list grep-command "rg" "ag" "grep")
+   for actual-command = (and command
+			     (let ((command-no-args (car
+						     (split-string command))))
+			       (executable-find command-no-args)))
+   while (not actual-command)
+   finally return actual-command))
 
 (defun counsel-gtags--build-command-to-collect-candidates (type &optional query)
   "Build command line string to gather candidates according to TYPE and QUERY.
@@ -442,7 +442,7 @@ Useful for jumping from a location when using global commands (like with
 		      encoding
 		      nil))
 	 (files (mapcar (lambda (candidate)
-			  (multiple-value-bind (file-path line)
+			  (multiple-value-bind (file-path _)
 			      (counsel-gtags--file-and-line candidate)
 			    file-path)) candidates)))
     files))
