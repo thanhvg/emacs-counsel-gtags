@@ -337,6 +337,7 @@ See `counsel-gtags--complete-candidates' for more info."
 	      :caller 'counsel-gtags--read-tag)))
 
 (defun counsel-gtags--tag-directory ()
+  "Get directory from either GTAGSROOT env var or by running global."
   (with-temp-buffer
     (or (getenv "GTAGSROOT")
         (progn
@@ -505,7 +506,9 @@ Return t on success, nil otherwise."
       t)))
 
 (defun counsel-gtags--push (direction)
-  "Add new entry to context stack."
+  "Add new entry to context stack.
+
+DIRECTION ∈ '(from, to)."
   (let ((new-context (list :file (and (buffer-file-name)
                                       (counsel-gtags--real-file-name))
                            :buffer (current-buffer)
@@ -523,6 +526,9 @@ Return t on success, nil otherwise."
     (setq counsel-gtags--context-position 0)))
 
 (defun counsel-gtags--make-gtags-sentinel (action)
+  "Return default sentinel that messages success/failed exit.
+
+Message printed has ACTION as detail."
   (lambda (process _event)
     (when (eq (process-status process) 'exit)
       (if (zerop (process-exit-status process))
@@ -561,11 +567,13 @@ FN defaults to current buffer's file if not provided."
       (file-truename filename))))
 
 (defun counsel-gtags--read-tag-directory ()
+  "Get directory for tag generation from user."
   (let ((dir (read-directory-name "Directory tag generated: " nil nil t)))
     ;; On Windows, "gtags d:/tmp" work, but "gtags d:/tmp/" doesn't
     (directory-file-name (expand-file-name dir))))
 
 (defsubst counsel-gtags--how-to-update-tags ()
+  "Read prefix input from user and return corresponding type of tag update."
   (cl-case (prefix-numeric-value current-prefix-arg)
     (4 'entire-update)
     (16 'generate-other-directory)
@@ -574,7 +582,7 @@ FN defaults to current buffer's file if not provided."
 (defun counsel-gtags--update-tags-command (how-to)
   "Build global command line to update commands.
 HOW-TO ∈ '(entire-update generate-other-directory single-update) per
-`counsel-gtags--how-to-update-tags'."
+`counsel-gtags--how-to-update-tags' (user prefix)."
   ;; note: mayble use `-flatten' here
   (cl-case how-to
     (entire-update
@@ -590,6 +598,11 @@ HOW-TO ∈ '(entire-update generate-other-directory single-update) per
 	     (list (counsel-gtags--real-file-name))))))
 
 (defun counsel-gtags--update-tags-p (how-to interactive-p current-time)
+  "Should we update tags now?.
+
+Will update if being called interactively per INTERACTIVE-P.
+If HOW-TO equals 'single-update, will update only if
+`counsel-gtags-update-interval-second' seconds have passed up to CURRENT-TIME."
   (or interactive-p
       (and (eq how-to 'single-update)
            (buffer-file-name)
