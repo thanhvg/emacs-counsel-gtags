@@ -3,7 +3,7 @@
 language: emacs-lisp
 before_install:
   # enable ssh
-  - ssh-keygen -t rsa -C "<me@mymail>" -f ~/.ssh/id_this_travis_build
+  - ssh-keygen -t rsa -C "<me@mymail>" -f ~/.ssh/id_this_travis_build -P ""
   - cat ~/.ssh/id_this_travis_build.pub >> ~/.ssh/authorized_keys
   - ssh localhost echo I can ssh to localhost OK
   # PPA for Emacs nightlies
