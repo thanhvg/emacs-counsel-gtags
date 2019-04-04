@@ -113,7 +113,8 @@ int main{
      (f-write-text main-header-text 'utf-8 main-header-path)
      (call-process "gtags")
      (save-window-excursion
-       (let ((__result ,@body))
+       (let ((__result (progn
+			 ,@body)))
 	 ;; clean up buffers that may have been opened in the process before
 	 ;; returning
 	 (let* ((buffers-&-paths (mapcar
@@ -321,6 +322,36 @@ tested with a call to `shell-command-to-string' and `split-string' like
 				    command-line))))
      (should
       (equal collected expected)))))
+
+(ert-deftest using-tramp ()
+  (counsel-gtags--with-mock-project
+   (let ((current-dir default-directory))
+     (cd "/") ;; ensure we're not in the project directory in the local machine
+     (unwind-protect;; https://curiousprogrammer.wordpress.com/2009/06/08/error-handling-in-emacs-lisp/
+	 (let ((remote-buffer
+		(find-file (format "/ssh:localhost:%s"
+			      (file-truename main-file-path)))))
+	   ;; I expect `find-file' returns the new buffer
+	   (should (bufferp remote-buffer))
+	   (bufferp remote-buffer) ;; I believe `find-file' returns the new buffer
+	   (with-current-buffer remote-buffer
+	     (let* ((root (counsel-gtags--default-directory)))
+	       (should (file-remote-p root))
+	       (let* ((default-directory root)
+		      (type 'definition)
+		      ;; ↓ from correct-collection-of-candidates
+		      (tagname "another_global_fun")
+		      (encoding buffer-file-coding-system)
+		      (extra-options)
+		      (expected '("./main.c:11:void another_global_fun(){"))
+		      (collected
+		       (counsel-gtags--collect-candidates type
+							  tagname
+							  encoding
+							  extra-options)))
+		 (should (equal collected expected))))))
+       ;; restore previous dir
+       (cd current-dir)))))
 
 (provide 'unit-tests)
 ;;; unit-tests.el ends here

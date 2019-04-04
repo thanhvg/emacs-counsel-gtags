@@ -349,6 +349,21 @@ See `counsel-gtags--complete-candidates' for more info."
                                         (cygwin-convert-file-name-from-windows dir)
                                       dir)))))))
 
+(defun counsel-gtags--process-lines (command &rest args)
+  "Like `process-lines' on COMMAND and ARGS, but using `process-file'.
+
+`process-lines' does not support Tramp because it uses `call-process'.  Using
+`process-file' makes Tramp support auto-magical."
+  (let ((global-run-buffer (get-buffer-create (format "*global @ %s*" default-directory))))
+    (apply #'process-file "global"
+	   nil ;; no input file
+	   global-run-buffer;;BUFFER
+	   nil ;;DISPLAY
+	   args)
+    (with-current-buffer global-run-buffer
+      (split-string
+       (buffer-string) "\n" t))))
+
 (defun counsel-gtags--collect-candidates (type tagname encoding extra-options)
   "Collect lines for ⎡global …⎦ using TAGNAME as query.
 
@@ -367,7 +382,7 @@ This is for internal use and not for final user."
 			  ("" '())
 			  (_ (list tagname))))
 	 (global-args (append (reverse options) query-as-list)))
-    (apply #'process-lines "global" global-args)))
+    (apply #'counsel-gtags--process-lines "global" global-args)))
 
 (defun counsel-gtags--select-file (type tagname &optional extra-options auto-select-only-candidate)
   "Prompt the user to select a file_path:position according to query.
