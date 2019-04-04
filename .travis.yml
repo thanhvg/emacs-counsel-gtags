@@ -23,4 +23,5 @@ env:
 script:
   - $EMACS --version
   - global --version
+  - ssh localhost echo I can ssh to localhost OK
   - make test
