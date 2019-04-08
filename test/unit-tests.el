@@ -173,7 +173,7 @@ int main{
 	  (expected '("./main.c:11:void another_global_fun(){"))
 	  (collected (counsel-gtags--collect-candidates type tagname encoding extra-options)))
      (should
-      (-intersection collected expected)))))
+      (equal collected expected)))))
 
 (ert-deftest default-case-sensitive ()
   (let ((ivy-auto-select-single-candidate t)
@@ -268,27 +268,45 @@ ORIGINAL-FUN is `find-file'; rest of arguments (ARGS) is the file."
 	(should
 	 (string-equal expected-file-path opened-file-path))))))
 
-(ert-deftest correct-collection-of-candidates-when-calling-interactively ()
-  "Not actually an interactive call, but test the command line being built.
+(ert-deftest test-read-tag ()
+  "Test `counsel-gtags--read-tag'.
 
 Ivy documentation mentions that any call to `counsel--async-command' can be
 tested with a call to `shell-command-to-string' and `split-string' like
 
-(split-string (shell-command-to-string …))."
+(split-string (shell-command-to-string …)).
+
+It seems that `ivy-auto-select-single-candidate' doesn't work with async
+commands when calling `counsel-gtags--async-query' (by calling
+`counsel-gtags--read-tag')?
+So we have to re-write `counsel-gtags--read-tag' as part of the
+code.  Other choice is to inject code to simulate pressing enter on `ivy-read'.
+If you're reading this, feel free to do so.  I'm not going to do it."
   (counsel-gtags--with-mock-project
-   (let* ((root (counsel-gtags--default-directory))
-          (default-directory root)
-	  (type 'reference)
-	  (tagname "another_global_fun")
-	  ;; we're testing we _can_ reach this symbol, not it's not exclusive
-	  (expected '("another_global_fun"))
-	  (command-line (counsel-gtags--build-command-to-collect-candidates
-			 type tagname))
-	  ;;         ↓ simulate `counsel--async-command' inside `counsel-gtags--complete-candidates'
-	  (collected (split-string (shell-command-to-string
-				    command-line))))
-     (should
-      (-intersection collected expected)))))
+   ;; point to "another_global_fun" so it'll get picked up
+   (with-temp-buffer
+     (insert "another_global_fun")
+     (should (equal "another_global_fun"
+		    (thing-at-point 'symbol)))
+     (let* ((root (counsel-gtags--default-directory))
+	    (default-directory root)
+	    (type 'reference)
+	    (tagname "another_global_fun")
+	    (expected '("./main.h:5:void" "another_global_fun();"))
+	    ;; see `default-val' @ `counsel-gtags--read-tag'
+	    (query (and counsel-gtags-use-input-at-point
+			(thing-at-point 'symbol)))
+	    (command-line ;; ↓ (counsel-gtags--read-tag type)
+	     (let ((default-val (and counsel-gtags-use-input-at-point
+				     (thing-at-point 'symbol)))
+		   (prompt (assoc-default type counsel-gtags--prompts)))
+	       ;; ↓ see `counsel-gtags--async-query'
+	       (counsel-gtags--build-command-to-collect-candidates type query)))
+	    ;;         ↓ simulate `counsel-gtags--read-tag'
+	    (collected (split-string (shell-command-to-string
+				      command-line))))
+       (should
+	(equal collected expected))))))
 
 (ert-deftest get-grep-command-from-default-emacs ()
   "get grep command even from default value that includes flags"
@@ -307,21 +325,6 @@ tested with a call to `shell-command-to-string' and `split-string' like
        (not (s-matches? (rx (* any) "--color" )
 			(counsel-gtags--get-grep-command)))))))
 
-(ert-deftest grep-candidates-command-correctly ()
-  (counsel-gtags--with-mock-project
-   (let* ((root (counsel-gtags--default-directory))
-          (default-directory root)
-	  (type 'reference)
-	  (tagname "another_global_fun")
-	  ;; we're testing we _can_ *ONLY* reach this symbol
-	  (expected '("another_global_fun"))
-	  (command-line (counsel-gtags--build-command-to-collect-candidates
-			 type tagname))
-	  ;;         ↓ simulate `counsel--async-command' inside `counsel-gtags--complete-candidates'
-	  (collected (split-string (shell-command-to-string
-				    command-line))))
-     (should
-      (equal collected expected)))))
 
 (ert-deftest using-tramp ()
   (counsel-gtags--with-mock-project

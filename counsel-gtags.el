@@ -191,71 +191,34 @@ Otherwise, returns nil if couldn't find any."
 			       (executable-find command-no-args)))
    while (not actual-command)
    finally return actual-command))
+(defun counsel-gtags--build-command-to-collect-candidates (type query)
+  "Build command to collect condidates per TYPE filtering by QUERY.
 
-(defun counsel-gtags--build-command-to-collect-candidates (type &optional query)
-  "Build command line string to gather candidates according to TYPE and QUERY.
+Used in `counsel-gtags--async-query'."
+  (mapconcat #'shell-quote-argument
+	     (append
+	      `("global")
+	      (counsel-gtags--command-options type)
+	      `(,(counsel--elisp-to-pcre (ivy--regex query))))
+	     " "))
 
-Build global parameters according to TYPE and using QUERY
-if provided.
-If QUERY starts with `^',it will delegate the search to global (ie: it's faster)
-but the `^' won't be forwarded.
-Otherwise, the query will be filtered using a grep-like command from
-`counsel-gtags--get-grep-command' (probably `grep-command') when available.
-These optimization are due to global providing a \"search by prefix\" but not a
-\"search name by regex\" and that listing the database could be really slow."
-  (let* ((shell-command "sh")
-	 (non-empty-query (< 1 (length query)))
-	 (command-line (cond
-			((and non-empty-query
-			      (string-prefix-p "^" query)
-			      (not (counsel-gtags--string-looks-like-regex
-				    ;; skip "^" at the beginning
-				    (substring query 1))))
-			 ;; tell global to search for prefix
-			 (append
-			  `("global")
-			  (reverse
-			   (append
-			    `(,(substring query 1) "-c")
-			    (counsel-gtags--command-options type)))))
-			((and non-empty-query
-			      (executable-find shell-command)
-			      (counsel-gtags--get-grep-command))
-			 ;; run all database, pipe with grep
-			 (let* ((global-cmd-list (append
-						  `("global")
-						  (reverse
-						   (append
-						    (list "-c")
-						    (counsel-gtags--command-options type)))))
-				(grep-cmd-list (list
-						(counsel-gtags--get-grep-command)
-						(shell-quote-argument query)))
-				(shell-cmd-list (append
-						 global-cmd-list
-						 `("|")
-						 grep-cmd-list
-						 `("|" "cat"))) ;; https://stackoverflow.com/a/6550543/3637404
-				(shell-cmd-string (format "\"%s\""
-						     (mapconcat #'identity shell-cmd-list " "))))
-			   (list shell-command "-c" shell-cmd-string)))
-			;; default to "list all object names"
-			(t
-			 (append `("global") (reverse (append
-						       (list "-c")
-						       (counsel-gtags--command-options
-							type))))))))
-    (mapconcat #'identity command-line " ")))
-
-(defun counsel-gtags--complete-candidates (type &optional query)
+(defun counsel-gtags--async-query (type query)
   "Gather the object names asynchronously for `ivy-read'.
 
-Gets the command line from `counsel-gtags--build-command-to-collect-candidates'
-by forwarding TYPE and QUERY."
-  (counsel--async-command (counsel-gtags--build-command-to-collect-candidates
-			   type query))
-  ;; ↓ ensure nil output of this function
-  nil)
+Use global flags according to TYPE.
+
+Forward QUERY to global command to be treated as regex.
+
+Because «global -c» only accepts letters-and-numbers, we actually search for 
+tags matching QUERY, but filter the list.
+
+Inspired on ivy.org's `counsel-locate-function'."
+  (or
+   (ivy-more-chars)
+   (progn
+     (counsel--async-command
+      (counsel-gtags--build-command-to-collect-candidates type query))
+     '("" "Filtering …"))))
 
 (defun counsel-gtags--file-and-line (candidate)
   "Return list with file and position per CANDIDATE.
@@ -311,6 +274,8 @@ This is the `:action' callback for `ivy-read' calls."
 	(back-to-indentation))
       (counsel-gtags--push 'to))))
 
+
+
 (defun counsel-gtags--read-tag (type)
   "Prompt the user for selecting a tag using `ivy-read'.
 
@@ -318,23 +283,22 @@ Use TYPE ∈ '(definition reference symbol) for defining global parameters.
 If `counsel-gtags-use-input-at-point' is non-nil, will use symbol at point as
 initial input for `ivy-read'.
 
-You can use regular expressions that, for performance matters, will be filtered
-by `grep-command'.
-
 TYPE ∈ `counsel-gtags--prompts'
 
-See `counsel-gtags--complete-candidates' for more info."
+See `counsel-gtags--async-query' for more info."
   (let ((default-val (and counsel-gtags-use-input-at-point
 			  (thing-at-point 'symbol)))
         (prompt (assoc-default type counsel-gtags--prompts)))
-    (ivy-read prompt (lambda (input)
-		       (counsel-gtags--complete-candidates type input))
+    (ivy-read prompt (lambda (query)
+		       (counsel-gtags--async-query type query))
 	      :initial-input default-val
 	      :unwind (lambda ()
 			(counsel-delete-process)
 			(swiper--cleanup))
 	      :dynamic-collection t
 	      :caller 'counsel-gtags--read-tag)))
+
+
 
 (defun counsel-gtags--tag-directory ()
   "Get directory from either GTAGSROOT env var or by running global."
