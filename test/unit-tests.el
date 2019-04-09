@@ -241,32 +241,32 @@ ORIGINAL-FUN is `find-file'; rest of arguments (ARGS) is the file."
   (setq counsel-gtags--test-find-file-result (-first-item args)))
 
 (ert-deftest relative-to-project-root ()
-  "Open files correctly when relative to root."
+  "Open files correctly when relative to root.
+
+It seems that `ivy-auto-select-single-candidate' and `counsel-gtags--with' work
+with async commands when calling `counsel-gtags--async-query' (by calling
+`counsel-gtags--read-tag')?
+So we have to re-write `counsel-gtags-find-file' as part of the
+code.  Other choice is to inject code to simulate pressing enter on `ivy-read'.
+If you're reading this, feel free to do so.  I'm not going to do it."
   (save-window-excursion
-    (let*
-	((repo-root-path (locate-dominating-file "./" "counsel-gtags.el"))
-	 (sample-project-path (concat (file-name-as-directory repo-root-path)
-				      "test/sample-project/"))
-	 (expected-file-path (expand-file-name
-			      (concat (file-name-as-directory
-				       sample-project-path)
-				      "some-module/marichiweu.c"))))
-      (advice-add 'find-file :around #'counsel-gtags--intercept-find-file)
-      ;; ↓ sets `counsel-gtags--test-find-file-result'
-      (counsel-gtags--with
-       `(let ((counsel-gtags-path-style 'root)
-	      (ivy-auto-select-single-candidate t)
-	      (default-directory ,sample-project-path)
-	      ;; ↓simulate `counsel-gtags--default-directory' not being
-	      ;;  previously called
-	      (counsel-gtags--original-default-directory nil))
-	  (counsel-gtags-find-file "marichiweu.c"))
-       "C-m")
-      ;; ↓ `counsel-gtags--test-find-file-result' was set
-      (advice-remove 'find-file #'counsel-gtags--intercept-find-file)
-      (let ((opened-file-path counsel-gtags--test-find-file-result))
-	(should
-	 (string-equal expected-file-path opened-file-path))))))
+    (let* ( ;; locate paths
+	   (repo-root-path (locate-dominating-file "./" "counsel-gtags.el"))
+	   (sample-project-path (concat (file-name-as-directory repo-root-path)
+					"test/sample-project/"))
+	   ;; configure test
+	   (counsel-gtags-path-style 'root)
+	   (default-directory sample-project-path)
+	   ;;           ↓ see `counsel-gtags-find-file'
+	   (candidates (counsel-gtags--get-files))
+	   (expected
+	    (split-string (shell-command-to-string
+			   ;;    ↓ root of files is expected to be ⎡.⎦
+			   "find . -name '*.c' -or -name '*.h'")
+			  "\n" t)))
+      (should (equal
+	       candidates
+	       (-sort #'s-less? expected))))))
 
 (ert-deftest test-read-tag ()
   "Test `counsel-gtags--read-tag'.
@@ -276,57 +276,39 @@ tested with a call to `shell-command-to-string' and `split-string' like
 
 (split-string (shell-command-to-string …)).
 
-It seems that `ivy-auto-select-single-candidate' doesn't work with async
-commands when calling `counsel-gtags--async-query' (by calling
+It seems that `ivy-auto-select-single-candidate' and `counsel-gtags--with' work
+with async commands when calling `counsel-gtags--async-query' (by calling
 `counsel-gtags--read-tag')?
-So we have to re-write `counsel-gtags--read-tag' as part of the
+So we have to re-write `counsel-gtags--async-tag-query-process' as part of the
 code.  Other choice is to inject code to simulate pressing enter on `ivy-read'.
 If you're reading this, feel free to do so.  I'm not going to do it."
-  (counsel-gtags--with-mock-project
-   ;; point to "another_global_fun" so it'll get picked up
-   (with-temp-buffer
-     (insert "another_global_fun")
-     (should (equal "another_global_fun"
-		    (thing-at-point 'symbol)))
-     (let* ((root (counsel-gtags--default-directory))
-	    (default-directory root)
-	    (type 'reference)
-	    (tagname "another_global_fun")
-	    (expected '("./main.h:5:void" "another_global_fun();"))
-	    ;; see `default-val' @ `counsel-gtags--read-tag'
-	    (query (and counsel-gtags-use-input-at-point
-			(thing-at-point 'symbol)))
-	    (command-line ;; ↓ (counsel-gtags--read-tag type)
-	     (let ((default-val (and counsel-gtags-use-input-at-point
-				     (thing-at-point 'symbol)))
-		   (prompt (assoc-default type counsel-gtags--prompts)))
-	       ;; ↓ see `counsel-gtags--async-query'
-	       (counsel-gtags--build-command-to-collect-candidates type query)))
-	    ;;         ↓ simulate `counsel-gtags--read-tag'
-	    (collected (split-string (shell-command-to-string
-				      command-line))))
-       (should
-	(equal collected expected))))))
+  (let* ((repo-root-path (locate-dominating-file "./" "counsel-gtags.el"))
+	 (sample-project-path (concat (file-name-as-directory repo-root-path)
+       				      "test/sample-project/")))
+    (save-window-excursion
+      (with-current-buffer (find-file (format "%s/main.c" sample-project-path))
+	(goto-char (point-min))
+	(search-forward "marichiweu"
+			(point-max))
 
-(ert-deftest get-grep-command-from-default-emacs ()
-  "get grep command even from default value that includes flags"
-  (let ((grep-commmand "grep --color -nH --null -e "))
-    (when (executable-find "grep") ;; have a grep command
-      (should
-       (not (string-empty-p (counsel-gtags--get-grep-command))))
-      (should ;; removes flags
-       (not (s-matches? (rx (* any) "--color" )
-			(counsel-gtags--get-grep-command))))))
-  (let ((grep-commmand nil))
-    (when (executable-find "grep") ;; have a grep command
-      (should
-       (not (string-empty-p (counsel-gtags--get-grep-command))))
-      (should ;; removes flags
-       (not (s-matches? (rx (* any) "--color" )
-			(counsel-gtags--get-grep-command)))))))
+	(let* (;; default-val @ `counsel-gtags--read-tag'
+	       (query (thing-at-point 'symbol))
+	       (raw-string
+		;; see `counsel-gtags--async-tag-query-process'
+		(shell-command-to-string
+		 (counsel-gtags--build-command-to-collect-candidates query '("--result=ctags"))))
+	       (filtered-string
+		;; see `counsel-gtags--async-tag-query-process'
+		(counsel-gtags--filter-tags raw-string)))
+	  (should (string-equal "marichiweu\n" ;; single line
+				(replace-regexp-in-string (rx (* (char space)) line-end)
+							  ""
+							  filtered-string))))))))
+
 
 
 (ert-deftest using-tramp ()
+  "See https://github.com/FelipeLema/emacs-counsel-gtags/issues/1"
   (counsel-gtags--with-mock-project
    (let ((current-dir default-directory))
      (cd "/") ;; ensure we're not in the project directory in the local machine
@@ -355,6 +337,18 @@ If you're reading this, feel free to do so.  I'm not going to do it."
 		 (should (equal collected expected))))))
        ;; restore previous dir
        (cd current-dir)))))
+
+(ert-deftest select-file ()
+  "See https://github.com/FelipeLema/emacs-counsel-gtags/issues/2"
+  (counsel-gtags--with-mock-project
+   (save-window-excursion
+     (let ((default-directory (counsel-gtags--default-directory)))
+       (cl-multiple-value-bind (the-buffer  the-line)
+	   (counsel-gtags--jump-to "./main.c:11:void another_global_fun(){")
+	 (should (string-equal
+		  (file-name-nondirectory (buffer-file-name the-buffer))
+		  "main.c"))
+	 (should (equal the-line 11)))))))
 
 (provide 'unit-tests)
 ;;; unit-tests.el ends here

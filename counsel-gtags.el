@@ -29,6 +29,7 @@
 (require 'counsel)
 (require 'cl-lib)
 (require 'rx)
+(require 'seq)
 
 (declare-function cygwin-convert-file-name-from-windows "cygw32.c")
 (declare-function cygwin-convert-file-name-to-windows "cygw32.c")
@@ -153,10 +154,15 @@ Kept free of whitespaces."
 (defun counsel-gtags--command-options (type &optional extra-options)
   "Get list with options for global command according to TYPE.
 
-Prepend EXTRA-OPTIONS."
-  (let ((options '("--result=grep")))
-    (when extra-options
-      (setq options (append extra-options options)))
+Prepend EXTRA-OPTIONS.  If \"--result=.\" is in EXTRA-OPTIONS, it will have
+precedence over default \"--result=grep\"."
+  (let* ((options extra-options)
+	 (has-result (seq-filter (lambda (opt)
+				   (and (stringp opt)
+					(string-prefix-p "--result=" opt)))
+				 options)))
+    (unless has-result
+      (setq options (append '("--result=grep") options)))
     (let ((opt (assoc-default type counsel-gtags--complete-options)))
       (when opt
         (push opt options)))
@@ -191,18 +197,41 @@ Otherwise, returns nil if couldn't find any."
 			       (executable-find command-no-args)))
    while (not actual-command)
    finally return actual-command))
-(defun counsel-gtags--build-command-to-collect-candidates (type query)
-  "Build command to collect condidates per TYPE filtering by QUERY.
 
-Used in `counsel-gtags--async-query'."
+(defun counsel-gtags--build-command-to-collect-candidates (query &optional extra-args)
+  "Build command to collect condidates filtering by QUERY.
+
+Used in `counsel-gtags--async-tag-query'.  Forward QUERY and EXTRA-ARGS to
+`counsel-gtags--command-options'.
+Since it's a tag query, we use definition as type when getting options"
   (mapconcat #'shell-quote-argument
 	     (append
 	      `("global")
-	      (counsel-gtags--command-options type)
+	      (counsel-gtags--command-options 'definition extra-args)
 	      `(,(counsel--elisp-to-pcre (ivy--regex query))))
 	     " "))
+(defun counsel-gtags--filter-tags (s)
+  "Filter function receving S.
 
-(defun counsel-gtags--async-query (type query)
+Extract the first part of each line, containing the tag."
+  (replace-regexp-in-string (rx (char space) (* any) line-end)
+			    ""
+			    s))
+
+(defun counsel-gtags--async-tag-query-process (query)
+  "Add filter to tag query command.
+
+Input for searching is QUERY.
+
+Since we can't look for tags by regex, we look for their definition and filter
+the location, giving us a list of tags with no locations."
+  (counsel--async-command
+   (counsel-gtags--build-command-to-collect-candidates query '("--result=ctags"))
+   nil ;; default sentinel
+   (lambda (p s)
+     (counsel--async-filter p (counsel-gtags--filter-tags s)))))
+
+(defun counsel-gtags--async-tag-query (query)
   "Gather the object names asynchronously for `ivy-read'.
 
 Use global flags according to TYPE.
@@ -216,8 +245,7 @@ Inspired on ivy.org's `counsel-locate-function'."
   (or
    (ivy-more-chars)
    (progn
-     (counsel--async-command
-      (counsel-gtags--build-command-to-collect-candidates type query))
+     (counsel-gtags--async-tag-query-process query)
      '("" "Filtering …"))))
 
 (defun counsel-gtags--file-and-line (candidate)
@@ -253,31 +281,40 @@ Note: candidates are handled as ⎡file:location⎦ and ⎡(file . location)⎦.
 	  file-candidate)))
     (counsel-gtags--real-file-name file-path-per-style)))
 
+(defun counsel-gtags--jump-to (candidate &optional push)
+  "Call `find-file' and `forward-line' on file location from CANDIDATE .
+
+Calls `counsel-gtags--push' at the end if PUSH is non-nil.
+Returns (buffer line)"
+  (cl-multiple-value-bind (file-path line)
+      (counsel-gtags--file-and-line candidate)
+    (let* ((default-directory (file-name-as-directory
+			       (or counsel-gtags--original-default-directory
+				   default-directory)))
+	   (file (counsel-gtags--resolve-actual-file-from file-path))
+	   (opened-buffer (find-file file)))
+      ;; position correctly within the file
+      (goto-char (point-min))
+      (forward-line (1- line))
+      (back-to-indentation)
+      (if push
+	  (counsel-gtags--push 'to))
+      `(,opened-buffer ,line))))
+
 (defun counsel-gtags--find-file (candidate)
   "Open file-at-position per CANDIDATE using `find-file'.
 
 This is the `:action' callback for `ivy-read' calls."
   (with-ivy-window
     (swiper--cleanup)
-    (multiple-value-bind (file-path line) (counsel-gtags--file-and-line candidate)
-      (counsel-gtags--push 'from)
-      (let ((default-directory (file-name-as-directory
-				(or counsel-gtags--original-default-directory
-				    default-directory)))
-	    (file (counsel-gtags--resolve-actual-file-from file-path)
-		  ;;(counsel-gtags--real-file-name file-path) TODO remove this by 2020-12-24
-		  ))
-	(find-file file)
-	;; position correctly within the file
-	(goto-char (point-min))
-	(forward-line (1- line))
-	(back-to-indentation))
-      (counsel-gtags--push 'to))))
-
+    (counsel-gtags--push 'from)
+    (counsel-gtags--jump-to candidate 'push)))
 
 
 (defun counsel-gtags--read-tag (type)
   "Prompt the user for selecting a tag using `ivy-read'.
+
+Returns selected tag
 
 Use TYPE ∈ '(definition reference symbol) for defining global parameters.
 If `counsel-gtags-use-input-at-point' is non-nil, will use symbol at point as
@@ -285,12 +322,12 @@ initial input for `ivy-read'.
 
 TYPE ∈ `counsel-gtags--prompts'
 
-See `counsel-gtags--async-query' for more info."
+See `counsel-gtags--async-tag-query' for more info."
   (let ((default-val (and counsel-gtags-use-input-at-point
 			  (thing-at-point 'symbol)))
         (prompt (assoc-default type counsel-gtags--prompts)))
     (ivy-read prompt (lambda (query)
-		       (counsel-gtags--async-query type query))
+		       (counsel-gtags--async-tag-query query))
 	      :initial-input default-val
 	      :unwind (lambda ()
 			(counsel-delete-process)
@@ -346,6 +383,7 @@ This is for internal use and not for final user."
 			  ("" '())
 			  (_ (list tagname))))
 	 (global-args (append (reverse options) query-as-list)))
+    
     (apply #'counsel-gtags--process-lines "global" global-args)))
 
 (defun counsel-gtags--select-file (type tagname &optional extra-options auto-select-only-candidate)
@@ -421,10 +459,13 @@ Useful for jumping from a location when using global commands (like with
 		      encoding
 		      nil))
 	 (files (mapcar (lambda (candidate)
-			  (multiple-value-bind (file-path _)
+			  (cl-multiple-value-bind (file-path _)
 			      (counsel-gtags--file-and-line candidate)
-			    file-path)) candidates)))
-    files))
+			    file-path))
+			candidates
+			)))
+    (remove-duplicates files
+		       :test #'string-equal)))
 
 ;;;###autoload
 (defun counsel-gtags-find-file (&optional filename)
