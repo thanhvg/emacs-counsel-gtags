@@ -359,8 +359,14 @@ See `counsel-gtags--async-tag-query' for more info."
 
 `process-lines' does not support Tramp because it uses `call-process'.  Using
 `process-file' makes Tramp support auto-magical."
-  (let ((global-run-buffer (get-buffer-create (format "*global @ %s*" default-directory))))
-    (apply #'process-file "global"
+  ;; Space before buffer name to make it "invisible"
+  (let ((global-run-buffer (get-buffer-create (format " *global @ %s*" default-directory))))
+    ;; The buffer needs to be cleared, this can be done after split-string,
+    ;; but for now it is better to keep it like this for debugging purposed
+    ;; between calls
+    (with-current-buffer global-run-buffer
+      (erase-buffer))
+    (apply #'process-file command
 	   nil ;; no input file
 	   global-run-buffer;;BUFFER
 	   nil ;;DISPLAY
@@ -397,18 +403,20 @@ Use TYPE ∈ '(definition reference symbol) for defining global parameters.
 Use TAGNAME for global query.
 Use AUTO-SELECT-ONLY-CANDIDATE to skip `ivy-read' if have a single candidate.
 Extra command line parameters to global are forwarded through EXTRA-OPTIONS."
-  (let* ((root (counsel-gtags--default-directory))
-         (encoding buffer-file-coding-system)
-         (default-directory root)
-         (collection (counsel-gtags--collect-candidates
-                      type tagname encoding extra-options))
-         (ivy-auto-select-single-candidate t) ;; see issue #7
-         )
-    (if (and auto-select-only-candidate (= (length collection) 1))
-        (counsel-gtags--find-file (car collection))
-      (ivy-read "Pattern: " collection
-                :action #'counsel-gtags--find-file
-                :caller 'counsel-gtags--select-file))))
+  (if (string-empty-p tagname)
+      (message "No candidate tags")
+    (let* ((root (counsel-gtags--default-directory))
+           (encoding buffer-file-coding-system)
+           (default-directory root)
+           (collection (counsel-gtags--collect-candidates
+			type tagname encoding extra-options))
+           (ivy-auto-select-single-candidate t) ;; see issue #7
+           )
+      (if (and auto-select-only-candidate (= (length collection) 1))
+          (counsel-gtags--find-file (car collection))
+	(ivy-read "Pattern: " collection
+                  :action #'counsel-gtags--find-file
+                  :caller 'counsel-gtags--select-file)))))
 
 ;;;###autoload
 (defun counsel-gtags-find-definition (tagname)
@@ -468,8 +476,8 @@ Useful for jumping from a location when using global commands (like with
 			    file-path))
 			candidates
 			)))
-    (remove-duplicates files
-		       :test #'string-equal)))
+    (cl-remove-duplicates files
+			  :test #'string-equal)))
 
 (defun counsel-gtags--find-file-ivy-parameters (filename)
   "Get `counsel-gtags-find-file' the parameters from FILENAME to call `ivy-read'."
