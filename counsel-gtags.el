@@ -505,11 +505,10 @@ Useful for jumping from a location when using global commands (like with
 (defun counsel-gtags-find-file (&optional filename)
   "Search/narrow for FILENAME among tagged files."
   (interactive)
-  (apply 'ivy-read candidates
+  (apply 'ivy-read
 	 (plist-put
 	  (counsel-gtags--find-file-ivy-parameters filename)
-	  :caller 'counsel-gtags-find-file-name)
-	 :initial-input default-file))
+	  :caller 'counsel-gtags-find-file-name)))
 
 ;;;###autoload
 (defun counsel-gtags-go-backward ()
