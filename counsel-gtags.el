@@ -311,8 +311,7 @@ This is the `:action' callback for `ivy-read' calls."
     (counsel-gtags--jump-to candidate 'push)))
 
 (defun counsel-gtags--read-tag-ivy-parameters (type)
-  "Get `counsel-gtags--read-tag' the parameters from TYPE to call `ivy-read'.
-Returns (prompt collection initial-input  )"
+  "Get `counsel-gtags--read-tag' the parameters from TYPE to call `ivy-read'."
   `(,(assoc-default type counsel-gtags--prompts)
     counsel-gtags--async-tag-query
     :initial-input ,(and counsel-gtags-use-input-at-point
@@ -396,13 +395,8 @@ This is for internal use and not for final user."
 	 (global-args (append (reverse options) query-as-list)))
     (apply #'counsel-gtags--process-lines "global" global-args)))
 
-(defun counsel-gtags--select-file (type tagname &optional extra-options auto-select-only-candidate)
-  "Prompt the user to select a file_path:position according to query.
-
-Use TYPE ∈ '(definition reference symbol) for defining global parameters.
-Use TAGNAME for global query.
-Use AUTO-SELECT-ONLY-CANDIDATE to skip `ivy-read' if have a single candidate.
-Extra command line parameters to global are forwarded through EXTRA-OPTIONS."
+(defun counsel-gtags--select-file-ivy-parameters (type tagname extra-options auto-select-only-candidate)
+  "Get `counsel-gtags--select-file' the parameters from TYPE to call `ivy-read'."
   (if (string-empty-p tagname)
       (message "No candidate tags")
     (let* ((root (counsel-gtags--default-directory))
@@ -412,11 +406,28 @@ Extra command line parameters to global are forwarded through EXTRA-OPTIONS."
 			type tagname encoding extra-options))
            (ivy-auto-select-single-candidate t) ;; see issue #7
            )
-      (if (and auto-select-only-candidate (= (length collection) 1))
-          (counsel-gtags--find-file (car collection))
-	(ivy-read "Pattern: " collection
-                  :action #'counsel-gtags--find-file
-                  :caller 'counsel-gtags--select-file)))))
+      `("Pattern: " ,collection
+        :action counsel-gtags--find-file))))
+
+(defun counsel-gtags--select-file (type tagname &optional extra-options auto-select-only-candidate)
+  "Prompt the user to select a file_path:position according to query.
+
+Use TYPE ∈ '(definition reference symbol) for defining global parameters.
+Use TAGNAME for global query.
+Use AUTO-SELECT-ONLY-CANDIDATE to skip `ivy-read' if have a single candidate.
+Extra command line parameters to global are forwarded through EXTRA-OPTIONS."
+  (let* ((the-ivy-arguments
+	  (counsel-gtags--select-file-ivy-parameters type
+						     tagname
+						     extra-options
+						     auto-select-only-candidate))
+	 (collection (cadr the-ivy-arguments)))
+    (if (and auto-select-only-candidate (= (length collection) 1))
+        (counsel-gtags--find-file (car collection))
+      ;; else
+      (apply 'ivy-read (plist-put
+			the-ivy-arguments
+			:caller 'counsel-gtags--select-file)))))
 
 ;;;###autoload
 (defun counsel-gtags-find-definition (tagname)

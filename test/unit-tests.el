@@ -357,14 +357,15 @@ tested with a call to `shell-command-to-string' and `split-string' like
 		 (should (file-remote-p root))
 		 (let* ((default-directory root)
 			(type 'definition)
-			;; ↓ from correct-collection-of-candidates
+			;; ↓ from `correct-collection-of-candidates' test
 			(tagname "another_global_fun")
-			(encoding buffer-file-coding-system)
 			(extra-options)
 			(auto-select-single-candidate t)
-			(collection (counsel-gtags--collect-candidates
-				     type tagname encoding extra-options)))
-		   (should (= (length collection) 1))
+			(collection (-second-item
+		      		     (counsel-gtags--select-file-ivy-parameters
+				      type tagname extra-options auto-select-single-candidate))))
+		   (should
+		    (= (length collection) 1))
 		   (cl-multiple-value-bind (the-buffer the-line)
 		       (counsel-gtags--jump-to (car collection))
 		     (should
