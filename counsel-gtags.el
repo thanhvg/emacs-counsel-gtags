@@ -362,7 +362,7 @@ See `counsel-gtags--async-tag-query' for more info."
     ;; between calls
     (with-current-buffer global-run-buffer
       (erase-buffer))
-    (apply #'process-file "global"
+    (apply #'process-file command
 	   nil ;; no input file
 	   global-run-buffer;;BUFFER
 	   nil ;;DISPLAY
@@ -471,8 +471,8 @@ Useful for jumping from a location when using global commands (like with
 			    file-path))
 			candidates
 			)))
-    (remove-duplicates files
-		       :test #'string-equal)))
+    (cl-remove-duplicates files
+			  :test #'string-equal)))
 
 ;;;###autoload
 (defun counsel-gtags-find-file (&optional filename)
