@@ -195,7 +195,7 @@ int main{
 			"ANOTHER_GLOBAL_FUN"))))))
 
 (ert-deftest file-path-resolution ()
-  "`counsel-gtags--real-file-name' resolves file paths correctly.
+  "`counsel-gtags--remote-truename' resolves local file paths correctly.
 
 No queries to global involved."
   (let* ((repo-root-path (locate-dominating-file "./" "counsel-gtags.el"))
@@ -205,7 +205,7 @@ No queries to global involved."
 			      (concat (file-name-as-directory sample-project-path)
 				      "some-module/marichiweu.c")))
 	 (default-directory (file-name-as-directory sample-project-path))
-	 (resolved-file-path (counsel-gtags--real-file-name "some-module/marichiweu.c")))
+	 (resolved-file-path (counsel-gtags--remote-truename "some-module/marichiweu.c")))
     (should (string-equal
 	     expected-file-path resolved-file-path))))
 
@@ -241,14 +241,7 @@ ORIGINAL-FUN is `find-file'; rest of arguments (ARGS) is the file."
   (setq counsel-gtags--test-find-file-result (-first-item args)))
 
 (ert-deftest relative-to-project-root ()
-  "Open files correctly when relative to root.
-
-It seems that `ivy-auto-select-single-candidate' and `counsel-gtags--with' work
-with async commands when calling `counsel-gtags--async-query' (by calling
-`counsel-gtags--read-tag')?
-So we have to re-write `counsel-gtags-find-file' as part of the
-code.  Other choice is to inject code to simulate pressing enter on `ivy-read'.
-If you're reading this, feel free to do so.  I'm not going to do it."
+  "Open files correctly when relative to root."
   (save-window-excursion
     (let* ( ;; locate paths
 	   (repo-root-path (locate-dominating-file "./" "counsel-gtags.el"))
@@ -257,16 +250,17 @@ If you're reading this, feel free to do so.  I'm not going to do it."
 	   ;; configure test
 	   (counsel-gtags-path-style 'root)
 	   (default-directory sample-project-path)
-	   ;;           ↓ see `counsel-gtags-find-file'
-	   (candidates (counsel-gtags--get-files))
 	   (expected
 	    (split-string (shell-command-to-string
 			   ;;    ↓ root of files is expected to be ⎡.⎦
 			   "find . -name '*.c' -or -name '*.h'")
 			  "\n" t)))
-      (should (equal
-	       candidates
-	       (-sort #'s-less? expected))))))
+      (let ((candidates
+	     (-second-item
+	      (counsel-gtags--find-file-ivy-parameters nil))))
+	(should (equal
+		 candidates
+		 (-sort #'s-less? expected)))))))
 
 (ert-deftest test-read-tag ()
   "Test `counsel-gtags--read-tag'.
@@ -276,12 +270,7 @@ tested with a call to `shell-command-to-string' and `split-string' like
 
 (split-string (shell-command-to-string …)).
 
-It seems that `ivy-auto-select-single-candidate' and `counsel-gtags--with' work
-with async commands when calling `counsel-gtags--async-query' (by calling
-`counsel-gtags--read-tag')?
-So we have to re-write `counsel-gtags--async-tag-query-process' as part of the
-code.  Other choice is to inject code to simulate pressing enter on `ivy-read'.
-If you're reading this, feel free to do so.  I'm not going to do it."
+"
   (let* ((repo-root-path (locate-dominating-file "./" "counsel-gtags.el"))
 	 (sample-project-path (concat (file-name-as-directory repo-root-path)
        				      "test/sample-project/")))
@@ -291,19 +280,23 @@ If you're reading this, feel free to do so.  I'm not going to do it."
 	(search-forward "marichiweu"
 			(point-max))
 
-	(let* (;; default-val @ `counsel-gtags--read-tag'
-	       (query (thing-at-point 'symbol))
+	(let* ((type 'symbol) ;; from `counsel-gtags-find-symbol'
+	       (params (counsel-gtags--read-tag-ivy-parameters type))
+	       (query (plist-get params :initial-input ))
 	       (raw-string
 		;; see `counsel-gtags--async-tag-query-process'
 		(shell-command-to-string
-		 (counsel-gtags--build-command-to-collect-candidates query '("--result=ctags"))))
+		 (counsel-gtags--build-command-to-collect-candidates
+		  query
+		  '("--result=ctags"))))
 	       (filtered-string
 		;; see `counsel-gtags--async-tag-query-process'
 		(counsel-gtags--filter-tags raw-string)))
-	  (should (string-equal "marichiweu\n" ;; single line
-				(replace-regexp-in-string (rx (* (char space)) line-end)
-							  ""
-							  filtered-string))))))))
+	  (should
+	   (string-equal "marichiweu\n" ;; single line
+			 (replace-regexp-in-string (rx (* (char space)) line-end)
+						   ""
+						   filtered-string))))))))
 
 
 
@@ -318,7 +311,6 @@ If you're reading this, feel free to do so.  I'm not going to do it."
 			      (file-truename main-file-path)))))
 	   ;; I expect `find-file' returns the new buffer
 	   (should (bufferp remote-buffer))
-	   (bufferp remote-buffer) ;; I believe `find-file' returns the new buffer
 	   (with-current-buffer remote-buffer
 	     (let* ((root (counsel-gtags--default-directory)))
 	       (should (file-remote-p root))
@@ -349,6 +341,38 @@ If you're reading this, feel free to do so.  I'm not going to do it."
 		  (file-name-nondirectory (buffer-file-name the-buffer))
 		  "main.c"))
 	 (should (equal the-line 11)))))))
+
+(ert-deftest select-remote-file ()
+  "See https://github.com/FelipeLema/emacs-counsel-gtags/issues/1#issuecomment-481333499"
+  (counsel-gtags--with-mock-project
+   (let ((current-dir default-directory))
+     (cd "/") ;; ensure we're not in the project directory in the local machine
+     (unwind-protect;; https://curiousprogrammer.wordpress.com/2009/06/08/error-handling-in-emacs-lisp/
+	 (let ((remote-buffer
+		(find-file (format "/ssh:localhost:%s"
+				   (file-truename main-file-path)))))
+	   (save-window-excursion
+	     (with-current-buffer remote-buffer
+	       (let* ((root (counsel-gtags--default-directory)))
+		 ;;;;;;;;(should (file-remote-p root))
+		 (let* ((default-directory root)
+			(type 'definition)
+			;; ↓ from correct-collection-of-candidates
+			(tagname "another_global_fun")
+			(encoding buffer-file-coding-system)
+			(extra-options)
+			(auto-select-single-candidate t)
+			(collection (counsel-gtags--collect-candidates
+				     type tagname encoding extra-options)))
+		   '(counsel-gtags--select-file tagname
+						type
+						extra-options
+						auto-select-single-candidate)
+		   ;;;;;(should (= (length collection) 1))
+		   (cl-multiple-value-bind (the-buffer the-line)
+		       (counsel-gtags--jump-to (car collection))
+		     (should
+		      (file-remote-p (buffer-file-name the-buffer)))))))))))))
 
 (provide 'unit-tests)
 ;;; unit-tests.el ends here

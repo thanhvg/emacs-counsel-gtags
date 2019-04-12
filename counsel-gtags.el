@@ -238,7 +238,7 @@ Use global flags according to TYPE.
 
 Forward QUERY to global command to be treated as regex.
 
-Because «global -c» only accepts letters-and-numbers, we actually search for 
+Because «global -c» only accepts letters-and-numbers, we actually search for
 tags matching QUERY, but filter the list.
 
 Inspired on ivy.org's `counsel-locate-function'."
@@ -279,7 +279,7 @@ Note: candidates are handled as ⎡file:location⎦ and ⎡(file . location)⎦.
 	      "Unexpected counsel-gtags-path-style: %s"
 	      (symbol-name counsel-gtags-path-style))))
 	  file-candidate)))
-    (counsel-gtags--real-file-name file-path-per-style)))
+    (file-truename file-path-per-style)))
 
 (defun counsel-gtags--jump-to (candidate &optional push)
   "Call `find-file' and `forward-line' on file location from CANDIDATE .
@@ -310,6 +310,17 @@ This is the `:action' callback for `ivy-read' calls."
     (counsel-gtags--push 'from)
     (counsel-gtags--jump-to candidate 'push)))
 
+(defun counsel-gtags--read-tag-ivy-parameters (type)
+  "Get `counsel-gtags--read-tag' the parameters from TYPE to call `ivy-read'.
+Returns (prompt collection initial-input  )"
+  `(,(assoc-default type counsel-gtags--prompts)
+    counsel-gtags--async-tag-query
+    :initial-input ,(and counsel-gtags-use-input-at-point
+			 (thing-at-point 'symbol))
+    :unwind ,(lambda ()
+	       (counsel-delete-process)
+	       (swiper--cleanup))
+    :dynamic-collection t))
 
 (defun counsel-gtags--read-tag (type)
   "Prompt the user for selecting a tag using `ivy-read'.
@@ -323,17 +334,10 @@ initial input for `ivy-read'.
 TYPE ∈ `counsel-gtags--prompts'
 
 See `counsel-gtags--async-tag-query' for more info."
-  (let ((default-val (and counsel-gtags-use-input-at-point
-			  (thing-at-point 'symbol)))
-        (prompt (assoc-default type counsel-gtags--prompts)))
-    (ivy-read prompt (lambda (query)
-		       (counsel-gtags--async-tag-query query))
-	      :initial-input default-val
-	      :unwind (lambda ()
-			(counsel-delete-process)
-			(swiper--cleanup))
-	      :dynamic-collection t
-	      :caller 'counsel-gtags--read-tag)))
+  (apply 'ivy-read
+	 (plist-put
+	  (counsel-gtags--read-tag-ivy-parameters type)
+	  :caller 'counsel-gtags--read-tag)))
 
 
 
@@ -381,9 +385,9 @@ This is for internal use and not for final user."
 	 (query-as-list (pcase tagname
 			  ((pred null) '())
 			  ("" '())
+			  (`definition '())
 			  (_ (list tagname))))
 	 (global-args (append (reverse options) query-as-list)))
-    
     (apply #'counsel-gtags--process-lines "global" global-args)))
 
 (defun counsel-gtags--select-file (type tagname &optional extra-options auto-select-only-candidate)
@@ -467,17 +471,27 @@ Useful for jumping from a location when using global commands (like with
     (remove-duplicates files
 		       :test #'string-equal)))
 
+(defun counsel-gtags--find-file-ivy-parameters (filename)
+  "Get `counsel-gtags-find-file' the parameters from FILENAME to call `ivy-read'."
+
+  (let* ((initial-input (or filename
+			    (counsel-gtags--include-file)))
+         (collection (counsel-gtags--get-files)))
+    `("Find File: "
+      ,collection
+      :initial-input ,initial-input
+      :action counsel-gtags--find-file)))
+
 ;;;###autoload
 (defun counsel-gtags-find-file (&optional filename)
   "Search/narrow for FILENAME among tagged files."
   (interactive)
-  (let* ((default-file (or filename
-                           (counsel-gtags--include-file)))
-         (candidates (counsel-gtags--get-files)))
-    (ivy-read "Find File: " candidates
-              :initial-input default-file
-              :action #'counsel-gtags--find-file
-              :caller 'counsel-gtags-find-file-name)))
+  (apply 'ivy-read candidates
+	 (plist-put
+	  (counsel-gtags--find-file-ivy-parameters filename)
+	  :caller 'counsel-gtags-find-file-name)
+	 :initial-input default-file
+	 ))
 
 ;;;###autoload
 (defun counsel-gtags-go-backward ()
@@ -510,7 +524,7 @@ Useful for jumping from a location when using global commands (like with
 
 (defun counsel-gtags--goto (position)
   "Go to POSITION in context stack.
-Return t on success, nil otherwise."
+  Return t on success, nil otherwise."
   (let ((context (nth position counsel-gtags--context)))
     (when (and context
                (cond
@@ -528,9 +542,9 @@ Return t on success, nil otherwise."
 (defun counsel-gtags--push (direction)
   "Add new entry to context stack.
 
-DIRECTION ∈ '(from, to)."
+  DIRECTION ∈ '(from, to)."
   (let ((new-context (list :file (and (buffer-file-name)
-                                      (counsel-gtags--real-file-name))
+                                      (file-truename (buffer-file-name)))
                            :buffer (current-buffer)
                            :line (line-number-at-pos)
                            :direction direction)))
@@ -548,7 +562,7 @@ DIRECTION ∈ '(from, to)."
 (defun counsel-gtags--make-gtags-sentinel (action)
   "Return default sentinel that messages success/failed exit.
 
-Message printed has ACTION as detail."
+  Message printed has ACTION as detail."
   (lambda (process _event)
     (when (eq (process-status process) 'exit)
       (if (zerop (process-exit-status process))
@@ -558,8 +572,8 @@ Message printed has ACTION as detail."
 ;;;###autoload
 (defun counsel-gtags-create-tags (rootdir label)
   "Create tag database in ROOTDIR.
-LABEL is passed as the value for the environment variable GTAGSLABEL.
-Prompt for ROOTDIR and LABEL if not given.  This command is asynchronous."
+  LABEL is passed as the value for the environment variable GTAGSLABEL.
+  Prompt for ROOTDIR and LABEL if not given.  This command is asynchronous."
   (interactive
    (list (read-directory-name "Directory: " nil nil t)
          (counsel-gtags--select-gtags-label)))
@@ -572,13 +586,13 @@ Prompt for ROOTDIR and LABEL if not given.  This command is asynchronous."
      proc
      (counsel-gtags--make-gtags-sentinel 'create))))
 
-(defun counsel-gtags--real-file-name (&optional fn)
-  "Return real file name for file path FN using `file-truename'.
+(defun counsel-gtags--remote-truename (&optional file-path)
+  "Return real file name for file path FILE-PATH in remote machine.
 
-Helper function, used to determine a file name (whether relative or absolute).
-Tramp remote files are supported.
-FN defaults to current buffer's file if not provided."
-  (let ((filename (or fn
+  If file is local, return its `file-truename'
+
+  FILE-PATH defaults to current buffer's file if it was not provided."
+  (let ((filename (or file-path
                       (buffer-file-name)
                       (error "This buffer is not related to any file")))
 	(default-directory (file-name-as-directory default-directory)))
@@ -601,8 +615,8 @@ FN defaults to current buffer's file if not provided."
 
 (defun counsel-gtags--update-tags-command (how-to)
   "Build global command line to update commands.
-HOW-TO ∈ '(entire-update generate-other-directory single-update) per
-`counsel-gtags--how-to-update-tags' (user prefix)."
+  HOW-TO ∈ '(entire-update generate-other-directory single-update) per
+  `counsel-gtags--how-to-update-tags' (user prefix)."
   ;; note: mayble use `-flatten' here
   (cl-case how-to
     (entire-update
@@ -615,14 +629,14 @@ HOW-TO ∈ '(entire-update generate-other-directory single-update) per
     (single-update
      (append '("global" "--single-update")
 	     counsel-gtags-global-extra-update-options-list
-	     (list (counsel-gtags--real-file-name))))))
+	     (list (counsel-gtags--remote-truename))))))
 
 (defun counsel-gtags--update-tags-p (how-to interactive-p current-time)
   "Should we update tags now?.
 
-Will update if being called interactively per INTERACTIVE-P.
-If HOW-TO equals 'single-update, will update only if
-`counsel-gtags-update-interval-second' seconds have passed up to CURRENT-TIME."
+  Will update if being called interactively per INTERACTIVE-P.
+  If HOW-TO equals 'single-update, will update only if
+  `counsel-gtags-update-interval-second' seconds have passed up to CURRENT-TIME."
   (or interactive-p
       (and (eq how-to 'single-update)
            (buffer-file-name)
@@ -633,9 +647,9 @@ If HOW-TO equals 'single-update, will update only if
 ;;;###autoload
 (defun counsel-gtags-update-tags ()
   "Update tag database for current file.
-Changes in other files are ignored.  With a prefix argument, update
-tags for all files.  With two prefix arguments, generate new tag
-database in prompted directory."
+  Changes in other files are ignored.  With a prefix argument, update
+  tags for all files.  With two prefix arguments, generate new tag
+  database in prompted directory."
   (interactive)
   (let ((how-to (counsel-gtags--how-to-update-tags))
         (interactive-p (called-interactively-p 'interactive))
@@ -651,16 +665,16 @@ database in prompted directory."
 (defun counsel-gtags--from-here (tagname)
   "Try to open file by querying TAGNAME and \"--from-here\"."
   (let* ((line (line-number-at-pos))
-         (root (counsel-gtags--real-file-name (counsel-gtags--default-directory)))
-         (file (counsel-gtags--real-file-name))
+         (root (counsel-gtags--remote-truename (counsel-gtags--default-directory)))
+         (file (counsel-gtags--remote-truename))
          (from-here-opt (format "--from-here=%d:%s" line (file-relative-name file root))))
     (counsel-gtags--select-file 'from-here tagname (list from-here-opt) t)))
 
 ;;;###autoload
 (defun counsel-gtags-dwim ()
   "Find definition or reference of thing at point (Do What I Mean).
-If point is at a definition, find its references, otherwise, find
-its definition."
+  If point is at a definition, find its references, otherwise, find
+  its definition."
   (interactive)
   (let ((cursor-symbol (thing-at-point 'symbol)))
     (if (and (buffer-file-name) cursor-symbol)
@@ -673,8 +687,8 @@ its definition."
 ;;;###autoload
 (define-minor-mode counsel-gtags-mode ()
   "Minor mode of counsel-gtags.
-If `counsel-gtags-update-tags' is non-nil, the tag files are updated
-after saving buffer."
+  If `counsel-gtags-update-tags' is non-nil, the tag files are updated
+  after saving buffer."
   :init-value nil
   :global     nil
   :keymap     counsel-gtags-mode-map
