@@ -498,8 +498,7 @@ Useful for jumping from a location when using global commands (like with
 	 (plist-put
 	  (counsel-gtags--find-file-ivy-parameters filename)
 	  :caller 'counsel-gtags-find-file-name)
-	 :initial-input default-file
-	 ))
+	 :initial-input default-file))
 
 ;;;###autoload
 (defun counsel-gtags-go-backward ()

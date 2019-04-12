@@ -350,11 +350,11 @@ tested with a call to `shell-command-to-string' and `split-string' like
      (unwind-protect;; https://curiousprogrammer.wordpress.com/2009/06/08/error-handling-in-emacs-lisp/
 	 (let ((remote-buffer
 		(find-file (format "/ssh:localhost:%s"
-				   (file-truename main-file-path)))))
+			      (file-truename main-file-path)))))
 	   (save-window-excursion
 	     (with-current-buffer remote-buffer
 	       (let* ((root (counsel-gtags--default-directory)))
-		 ;;;;;;;;(should (file-remote-p root))
+		 (should (file-remote-p root))
 		 (let* ((default-directory root)
 			(type 'definition)
 			;; ↓ from correct-collection-of-candidates
@@ -364,11 +364,7 @@ tested with a call to `shell-command-to-string' and `split-string' like
 			(auto-select-single-candidate t)
 			(collection (counsel-gtags--collect-candidates
 				     type tagname encoding extra-options)))
-		   '(counsel-gtags--select-file tagname
-						type
-						extra-options
-						auto-select-single-candidate)
-		   ;;;;;(should (= (length collection) 1))
+		   (should (= (length collection) 1))
 		   (cl-multiple-value-bind (the-buffer the-line)
 		       (counsel-gtags--jump-to (car collection))
 		     (should
