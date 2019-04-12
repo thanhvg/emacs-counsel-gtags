@@ -13,7 +13,7 @@
 - [ ] `GTAGSLIBPATH` support
 - [X] Basic History command
 - [ ] History navigate command
-- [ ] Tramp support
+- [x] Tramp support
 
 ## Requirements
 
