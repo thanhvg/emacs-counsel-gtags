@@ -205,12 +205,18 @@ Otherwise, returns nil if couldn't find any."
 Used in `counsel-gtags--async-tag-query'.  Forward QUERY and EXTRA-ARGS to
 `counsel-gtags--command-options'.
 Since it's a tag query, we use definition as type when getting options"
-  (mapconcat #'shell-quote-argument
-	     (append
-	      `("global")
-	      (counsel-gtags--command-options 'definition extra-args)
-	      `(,(counsel--elisp-to-pcre (ivy--regex query))))
-	     " "))
+  (concat
+   (mapconcat #'shell-quote-argument
+	      (append
+	       `("global" "-c")
+	       (counsel-gtags--command-options 'definition extra-args))
+	      " ")
+   " | "
+   (counsel-gtags--get-grep-command) " "
+   (thread-last (ivy--regex query)
+     (counsel--elisp-to-pcre)
+     (shell-quote-argument))))
+
 (defun counsel-gtags--filter-tags (s)
   "Filter function receving S.
 

@@ -105,6 +105,17 @@ void global_fun(){
 void another_global_fun(){
     write(header_header_int);
 }
+int the_first_func() {
+  return 0;
+}
+
+int the_second_func(int x) {
+  return 0;
+}
+
+int the_third_func(int x) {
+  return 0;
+}
 int main{
     int local_int;
 }")
@@ -370,6 +381,23 @@ tested with a call to `shell-command-to-string' and `split-string' like
 		       (counsel-gtags--jump-to (car collection))
 		     (should
 		      (file-remote-p (buffer-file-name the-buffer)))))))))))))
+
+(ert-deftest select-candidate ()
+  "See https://github.com/FelipeLema/emacs-counsel-gtags/issues/8"
+  (counsel-gtags--with-mock-project
+   (save-window-excursion
+     (let ((default-directory (counsel-gtags--default-directory)))
+       (let* ((type 'definition)
+	      (query "the_")
+	      (query-command
+	       (counsel-gtags--build-command-to-collect-candidates query '("--result=ctags")))
+	      (collected-results
+	       (s-split "\n" (shell-command-to-string query-command) t)))
+	 (should
+	  (equal collected-results
+		 '("the_first_func"
+		   "the_second_func"
+		   "the_third_func"))))))))
 
 (provide 'unit-tests)
 ;;; unit-tests.el ends here
