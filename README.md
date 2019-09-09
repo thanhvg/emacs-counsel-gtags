@@ -88,6 +88,13 @@ Find name by context.
   (define-key counsel-gtags-mode-map (kbd "M-,") 'counsel-gtags-go-backward))
 ```
 
+## See also
+
+My other "using global from withing Emacs" package: [global-tags.el](https://launchpad.net/global-tags.el)
+I stopped using this package (, created) and started using that one, which works best with [ivy-xref](https://github.com/alexmurray/ivy-xref). This package and [global-gtags](https://github.com/leoliu/ggtags) are really hard to maintain because newcomers have to absorb a lot of hacks so the code can work.
+
+This packages is mostly "make things friendly for ivy", while `global-gtags` is mostly "fight compilation-mode to present a decent UI". None use Emacs' native `xref.el`.
+
 [melpa-link]: https://melpa.org/#/counsel-gtags
 [melpa-stable-link]: https://stable.melpa.org/#/counsel-gtags
 [melpa-badge]: https://melpa.org/packages/counsel-gtags-badge.svg
