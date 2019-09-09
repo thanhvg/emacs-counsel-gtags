@@ -2,7 +2,7 @@
 
 ;; Copyright (C) 2018  Felipe Lema
 
-;; Author: Felipe Lema <felipel@devuan-pega>
+;; Author: Felipe Lema <1232306+FelipeLema@users.noreply.github.com>
 ;; Keywords:
 
 ;; This program is free software; you can redistribute it and/or modify
