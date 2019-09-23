@@ -169,6 +169,11 @@ int main{
    (should
     (string-equal (counsel-gtags--default-directory)
 		  (file-name-as-directory default-directory)))))
+
+(ert-deftest 00-environment-have-grep-command ()
+  "Assert that we have a grep tool of any kind"
+  (should (counsel-gtags--get-grep-command)))
+
 ;;;;;;;;;;;;;;;;;
 ;; Actual testing
 ;;;;;;;;;;;;;;;;;
@@ -398,6 +403,8 @@ tested with a call to `shell-command-to-string' and `split-string' like
 		 '("the_first_func"
 		   "the_second_func"
 		   "the_third_func"))))))))
+
+
 
 (provide 'unit-tests)
 ;;; unit-tests.el ends here
