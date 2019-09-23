@@ -304,15 +304,12 @@ tested with a call to `shell-command-to-string' and `split-string' like
 		(shell-command-to-string
 		 (counsel-gtags--build-command-to-collect-candidates
 		  query
-		  '("--result=ctags"))))
-	       (filtered-string
-		;; see `counsel-gtags--async-tag-query-process'
-		(counsel-gtags--filter-tags raw-string)))
+		  '("--result=ctags")))))
 	  (should
 	   (string-equal "marichiweu\n" ;; single line
 			 (replace-regexp-in-string (rx (* (char space)) line-end)
 						   ""
-						   filtered-string))))))))
+						   raw-string))))))))
 
 
 
