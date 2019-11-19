@@ -214,6 +214,7 @@ ivy's default filter `counsel--async-filter' is too slow with lots of tags."
 	      " ")
    " | "
    (counsel-gtags--get-grep-command) " "
+   "--color=never" " "
    (thread-last (ivy--regex query)
      (counsel--elisp-to-pcre)
      (shell-quote-argument))))
