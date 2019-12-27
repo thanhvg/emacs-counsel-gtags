@@ -109,6 +109,10 @@ This variable does not have any effect unless
 (defvar counsel-gtags--original-default-directory nil
   "Last `default-directory' where command is invoked.")
 
+(defvar counsel-gtags--grep-commands '("rg" "ag" "grep")
+  "List of grep-like commands to filter candidates.
+The first command available is used to do the filtering.")
+
 (defun counsel-gtags--select-gtags-label ()
   "Get label from user to be used to generate tags."
   (let ((labels '("default" "native" "ctags" "pygments")))
@@ -191,7 +195,7 @@ Returns a command without arguments.
 
 Otherwise, returns nil if couldn't find any."
   (cl-loop
-   for command in (list grep-command "rg" "ag" "grep")
+   for command in (cons grep-command counsel-gtags--grep-commands)
    for actual-command = (and command
 			     (let ((command-no-args (car
 						     (split-string command))))
