@@ -113,6 +113,11 @@ This variable does not have any effect unless
   "List of grep-like commands to filter candidates.
 The first command available is used to do the filtering.")
 
+(defvar counsel-gtags--grep-commands-no-color-options
+  '(("ag" . "--nocolor"))
+  "List of grep-like commands with their options to suppress colored output.
+By default \"--color=never\" is used.")
+
 (defun counsel-gtags--select-gtags-label ()
   "Get label from user to be used to generate tags."
   (let ((labels '("default" "native" "ctags" "pygments")))
@@ -200,6 +205,13 @@ Otherwise, returns nil if couldn't find any."
 			     (let ((command-no-args (car
 						     (split-string command))))
 			       (executable-find command-no-args)))
+   for actual-command = (and actual-command
+                             (concat
+                              actual-command " "
+                              (or (cdr (assoc
+                                        (file-name-base actual-command)
+                                        counsel-gtags--grep-commands-no-color-options))
+                                  "--color=never")))
    while (not actual-command)
    finally return actual-command))
 
@@ -218,7 +230,6 @@ ivy's default filter `counsel--async-filter' is too slow with lots of tags."
 	      " ")
    " | "
    (counsel-gtags--get-grep-command) " "
-   "--color=never" " "
    (thread-last (ivy--regex query)
      (counsel--elisp-to-pcre)
      (shell-quote-argument))))
