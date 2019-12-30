@@ -401,6 +401,27 @@ tested with a call to `shell-command-to-string' and `split-string' like
 		   "the_second_func"
 		   "the_third_func"))))))))
 
+(ert-deftest correct-no-color-option-for-ag ()
+  "See https://github.com/FelipeLema/emacs-counsel-gtags/issues/11"
+  (ert--skip-unless (executable-find "ag"))
+  (let ((counsel-gtags--grep-commands '("ag" "grep" "rg")))
+    (should
+     (string-suffix-p "ag --nocolor" (counsel-gtags--get-grep-command)))))
+
+(ert-deftest correct-no-color-option-for-grep ()
+  "See https://github.com/FelipeLema/emacs-counsel-gtags/issues/11"
+  (ert--skip-unless (executable-find "grep"))
+  (let ((counsel-gtags--grep-commands '("grep" "rg" "ag")))
+    (should
+     (string-suffix-p "grep --color=never" (counsel-gtags--get-grep-command)))))
+
+(ert-deftest correct-no-color-option-for-rg ()
+  "See https://github.com/FelipeLema/emacs-counsel-gtags/issues/11"
+  (ert--skip-unless (executable-find "rg"))
+  (let ((counsel-gtags--grep-commands '("rg" "ag" "grep")))
+    (should
+     (string-suffix-p "rg --color=never" (counsel-gtags--get-grep-command)))))
+
 
 
 (provide 'unit-tests)
