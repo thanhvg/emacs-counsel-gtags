@@ -109,6 +109,18 @@ This variable does not have any effect unless
 (defvar counsel-gtags--original-default-directory nil
   "Last `default-directory' where command is invoked.")
 
+(defvar counsel-gtags--grep-commands '("rg" "ag" "grep")
+  "List of grep-like commands to filter candidates.
+The first command available is used to do the filtering.  `grep-command', if
+non-nil and available, has a higher priority than any entries in this list.
+Use `counsel-gtags--grep-commands-no-color-options' to specify the options
+to suppress colored output.")
+
+(defvar counsel-gtags--grep-commands-no-color-options
+  '(("ag" . "--nocolor"))
+  "List of grep-like commands with their options to suppress colored output.
+By default \"--color=never\" is used.")
+
 (defun counsel-gtags--select-gtags-label ()
   "Get label from user to be used to generate tags."
   (let ((labels '("default" "native" "ctags" "pygments")))
@@ -189,13 +201,23 @@ precedence over default \"--result=grep\"."
 
 Returns a command without arguments.
 
-Otherwise, returns nil if couldn't find any."
+Otherwise, returns nil if couldn't find any.
+
+Use `counsel-gtags--grep-commands' to specify a list of commands to be
+checked for availability."
   (cl-loop
-   for command in (list grep-command "rg" "ag" "grep")
+   for command in (cons grep-command counsel-gtags--grep-commands)
    for actual-command = (and command
 			     (let ((command-no-args (car
 						     (split-string command))))
 			       (executable-find command-no-args)))
+   for actual-command = (and actual-command
+                             (concat
+                              actual-command " "
+                              (or (cdr (assoc
+                                        (file-name-base actual-command)
+                                        counsel-gtags--grep-commands-no-color-options))
+                                  "--color=never")))
    while (not actual-command)
    finally return actual-command))
 
@@ -214,7 +236,6 @@ ivy's default filter `counsel--async-filter' is too slow with lots of tags."
 	      " ")
    " | "
    (counsel-gtags--get-grep-command) " "
-   "--color=never" " "
    (thread-last (ivy--regex query)
      (counsel--elisp-to-pcre)
      (shell-quote-argument))))
