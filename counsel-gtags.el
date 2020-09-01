@@ -50,10 +50,12 @@
 The following values are supported:
 - `root'     Show path from root of current project.
 - `relative' Show path from current directory.
-- `absolute' Show absolute path."
+- `absolute' Show absolute path.
+- `abslib' Show absolute path for libraries (GTAGSLIBPATH) and relative path for the rest."
   :type '(choice (const :tag "Root of the current project" root)
                  (const :tag "Relative from the current directory" relative)
-                 (const :tag "Absolute path" absolute)))
+                 (const :tag "Absolute path" absolute)
+                 (const :tag "Absolute path for libraries (GTAGSLIBPATH) and relative path for the rest" abslib)))
 
 (defcustom counsel-gtags-auto-update nil
   "Whether to update the tag database when a buffer is saved to file."
@@ -156,13 +158,13 @@ Will trigger tags generation if not found."
 
 Kept free of whitespaces."
   (format "--path-style=%s"
-     (pcase counsel-gtags-path-style
-       ((or 'relative 'absolute)
-	(symbol-name counsel-gtags-path-style))
-       ('root "through")
-       (_
-	(error "Unexpected counsel-gtags-path-style: %s"
-	       (symbol-name counsel-gtags-path-style))))))
+          (pcase counsel-gtags-path-style
+            ((or 'relative 'absolute 'abslib)
+	     (symbol-name counsel-gtags-path-style))
+            ('root "through")
+            (_
+	     (error "Unexpected counsel-gtags-path-style: %s"
+	            (symbol-name counsel-gtags-path-style))))))
 
 (defun counsel-gtags--command-options (type &optional extra-options)
   "Get list with options for global command according to TYPE.
@@ -290,7 +292,7 @@ Note: candidates are handled as ⎡file:location⎦ and ⎡(file . location)⎦.
   (let ((file-path-per-style
 	 (concat
 	  (pcase counsel-gtags-path-style
-	    ((or 'relative 'absolute)
+	    ((or 'relative 'absolute 'abslib)
 	     "")
 	    ('root
 	     (file-name-as-directory
@@ -491,7 +493,7 @@ Useful for jumping from a location when using global commands (like with
 \"--from-here\")."
   (setq counsel-gtags--original-default-directory
         (cl-case counsel-gtags-path-style
-          ((relative absolute) default-directory)
+          ((relative absolute abslib) default-directory)
           (root (counsel-gtags--root)))))
 
 (defun counsel-gtags--get-files ()
