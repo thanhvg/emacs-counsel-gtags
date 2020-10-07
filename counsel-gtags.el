@@ -413,7 +413,7 @@ This is for internal use and not for final user."
 	 (global-args (append (reverse options) query-as-list)))
     (apply #'counsel-gtags--process-lines "global" global-args)))
 
-(defun counsel-gtags--select-file-ivy-parameters (type tagname extra-options auto-select-only-candidate)
+(defun counsel-gtags--select-file-ivy-parameters (type tagname extra-options)
   "Get `counsel-gtags--select-file' the parameters from TYPE to call `ivy-read'."
   (if (string-empty-p tagname)
       (message "No candidate tags")
@@ -437,8 +437,7 @@ Extra command line parameters to global are forwarded through EXTRA-OPTIONS."
   (let* ((the-ivy-arguments
 	  (counsel-gtags--select-file-ivy-parameters type
 						     tagname
-						     extra-options
-						     auto-select-only-candidate))
+						     extra-options))
 	 (collection (cadr the-ivy-arguments)))
     (if (and auto-select-only-candidate (= (length collection) 1))
         (counsel-gtags--find-file (car collection))
@@ -487,9 +486,9 @@ Prompt for TAGNAME if not given."
 Useful for jumping from a location when using global commands (like with
 \"--from-here\")."
   (setq counsel-gtags--original-default-directory
-        (cond counsel-gtags-path-style
-              ((relative absolute) default-directory)
-              (root (counsel-gtags--root)))))
+        (cl-case counsel-gtags-path-style
+          ((relative absolute) default-directory)
+          (root (counsel-gtags--root)))))
 
 (defun counsel-gtags--get-files ()
   "Get a list of all files from global."
@@ -716,8 +715,23 @@ its definition."
         (counsel-gtags--from-here (substring-no-properties cursor-symbol))
       (call-interactively 'counsel-gtags-find-definition))))
 
-(defvar counsel-gtags-mode-name " CounselGtags")
-(defvar counsel-gtags-command-map (make-sparse-keymap))
+(defvar counsel-gtags-command-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "d") #'counsel-gtags-find-definition)
+    (define-key map (kbd "r") #'counsel-gtags-find-reference)
+    (define-key map (kbd "s") #'counsel-gtags-find-symbol)
+    (define-key map (kbd "f") #'counsel-gtags-find-file)
+    map))
+
+(defvar counsel-gtags-mode-map (make-sparse-keymap)
+  (let ((map (make-sparse-keymap)))
+    (when counsel-gtags-use-suggested-key-map
+      (when counsel-gtags-prefix-key
+	(define-key map counsel-gtags-prefix-key 'counsel-gtags-command-map))
+
+      (define-key map [remap xref-pop-marker-stack] #'counsel-gtags-go-backward)
+      (define-key map [remap xref-find-definitions] #'counsel-gtags-find-definition))
+    map))
 
 ;;;###autoload
 (define-minor-mode counsel-gtags-mode ()
@@ -727,32 +741,11 @@ its definition."
   :init-value nil
   :global     nil
   :keymap     counsel-gtags-mode-map
-  :lighter    counsel-gtags-mode-name
   (if counsel-gtags-mode
       (when counsel-gtags-auto-update
         (add-hook 'after-save-hook 'counsel-gtags-update-tags nil t))
     (when counsel-gtags-auto-update
       (remove-hook 'after-save-hook 'counsel-gtags-update-tags t))))
-
-;; Key mapping of gtags-mode.
-(when counsel-gtags-use-suggested-key-map
-  ;; Current key mapping.
-  (let ((command-table '(("s" . counsel-gtags-find-symbol)
-                         ("r" . counsel-gtags-find-reference)
-                         ("t" . counsel-gtags-find-definition)
-                         ("d" . counsel-gtags-find-definition)))
-        (key-func (if (string-prefix-p "\\" counsel-gtags-prefix-key)
-                      #'concat
-                    (lambda (prefix key) (kbd (concat prefix " " key))))))
-    (cl-loop for (key . command) in command-table
-             do
-             (define-key counsel-gtags-mode-map (funcall key-func counsel-gtags-prefix-key key) command))
-
-    ;; common
-    (define-key counsel-gtags-mode-map "\C-]" 'counsel-gtags--from-here)
-    (define-key counsel-gtags-mode-map "\C-t" 'counsel-gtags-go-backward)
-    (define-key counsel-gtags-mode-map "\e*" 'counsel-gtags-go-backward)
-    (define-key counsel-gtags-mode-map "\e." 'counsel-gtags-find-definition)))
 
 (provide 'counsel-gtags)
 
