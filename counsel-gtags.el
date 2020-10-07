@@ -95,12 +95,14 @@ This variable does not have any effect unless
 
 (defconst counsel-gtags--prompts
   '((definition . "Find Definition: ")
-    (reference  . "Find Reference: ")
+    (file      . " Find File: ")
     (pattern    . "Find Pattern: ")
+    (reference  . "Find Reference: ")
     (symbol     . "Find Symbol: ")))
 
 (defconst counsel-gtags--complete-options
-  '((file      . "-P")
+  '((definition . "-d")
+    (file      . "-P")
     (pattern   . "-g")
     (reference . "-r")
     (symbol    . "-s")))
@@ -111,37 +113,23 @@ This variable does not have any effect unless
 (defvar counsel-gtags--original-default-directory nil
   "Last `default-directory' where command is invoked.")
 
-(defvar counsel-gtags--grep-commands '("rg" "ag" "grep")
+(defconst counsel-gtags--grep-commands '("rg" "ag" "grep")
   "List of grep-like commands to filter candidates.
 The first command available is used to do the filtering.  `grep-command', if
 non-nil and available, has a higher priority than any entries in this list.
 Use `counsel-gtags--grep-commands-no-color-options' to specify the options
 to suppress colored output.")
 
-(defvar counsel-gtags--grep-commands-no-color-options
+(defconst counsel-gtags--grep-commands-no-color-options
   '(("rg" . "--color never")
     ("ag" . "--nocolor")
     ("grep" . "--color=never"))
   "List of grep-like commands with their options to suppress colored output.
 By default \"--color=never\" is used.")
 
-(defun counsel-gtags--select-gtags-label ()
-  "Get label from user to be used to generate tags."
-  (let ((labels '("default" "native" "ctags" "pygments")))
-    (ivy-read "GTAGSLABEL(Default: default): " labels)))
-
-(defun counsel-gtags--generate-tags ()
-  "Query user for tag generation and do so if accepted."
-  (if (yes-or-no-p "File GTAGS not found. Run 'gtags'? ")
-      (let* ((root (read-directory-name "Root Directory: "))
-             (label (counsel-gtags--select-gtags-label))
-             (default-directory root))
-	(message "gtags is generating tags....")
-	(unless (zerop (process-file "gtags" nil nil nil "-q"
-                                     (concat "--gtagslabel=" label)))
-          (error "Failed: 'gtags -q'"))
-	root)
-    (error "Abort generating tag files")))
+(defconst counsel-gtags--labels
+  '("default" "native" "ctags" "pygments")
+  "List of valid values for gtags labels.")
 
 (defun counsel-gtags--root ()
   "Get gtags root by looking at env vars or looking for GTAGS.
@@ -149,7 +137,9 @@ By default \"--color=never\" is used.")
 Will trigger tags generation if not found."
   (or (getenv "GTAGSROOT")
       (locate-dominating-file default-directory "GTAGS")
-      (counsel-gtags--generate-tags)))
+      (if (yes-or-no-p "File GTAGS not found. Run 'gtags'? ")
+	  (interactive-call counsel-gtags-create-tags)
+	(error "Abort generating tag files"))))
 
 (defsubst counsel-gtags--windows-p ()
   "Whether we're inside non-free Gates OS."
@@ -190,6 +180,7 @@ precedence over default \"--result=grep\"."
       (push "-l" options))
     (when (getenv "GTAGSLIBPATH")
       (push "-T" options))
+    (message "Options: %s" options)
     options))
 
 (defun counsel-gtags--string-looks-like-regex (s)
@@ -609,8 +600,8 @@ Return t on success, nil otherwise."
 LABEL is passed as the value for the environment variable GTAGSLABEL.
 Prompt for ROOTDIR and LABEL if not given.  This command is asynchronous."
   (interactive
-   (list (read-directory-name "Directory: " nil nil t)
-         (counsel-gtags--select-gtags-label)))
+   (list (read-directory-name "Root Directory: " nil nil t)
+         (ivy-read "GTAGSLABEL: " counsel-gtags--labels)))
   (let* ((default-directory rootdir)
          (proc-buf (get-buffer-create " *counsel-gtags-tag-create*"))
          (proc (start-file-process
