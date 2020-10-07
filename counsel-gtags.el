@@ -119,7 +119,9 @@ Use `counsel-gtags--grep-commands-no-color-options' to specify the options
 to suppress colored output.")
 
 (defvar counsel-gtags--grep-commands-no-color-options
-  '(("ag" . "--nocolor"))
+  '(("rg" . "--color never")
+    ("ag" . "--nocolor")
+    ("grep" . "--color=never"))
   "List of grep-like commands with their options to suppress colored output.
 By default \"--color=never\" is used.")
 
@@ -130,16 +132,16 @@ By default \"--color=never\" is used.")
 
 (defun counsel-gtags--generate-tags ()
   "Query user for tag generation and do so if accepted."
-  (if (not (yes-or-no-p "File GTAGS not found. Run 'gtags'? "))
-      (error "Abort generating tag files")
-    (let* ((root (read-directory-name "Root Directory: "))
-           (label (counsel-gtags--select-gtags-label))
-           (default-directory root))
-      (message "gtags is generating tags....")
-      (unless (zerop (process-file "gtags" nil nil nil "-q"
-                                   (concat "--gtagslabel=" label)))
-        (error "Failed: 'gtags -q'"))
-      root)))
+  (if (yes-or-no-p "File GTAGS not found. Run 'gtags'? ")
+      (let* ((root (read-directory-name "Root Directory: "))
+             (label (counsel-gtags--select-gtags-label))
+             (default-directory root))
+	(message "gtags is generating tags....")
+	(unless (zerop (process-file "gtags" nil nil nil "-q"
+                                     (concat "--gtagslabel=" label)))
+          (error "Failed: 'gtags -q'"))
+	root)
+    (error "Abort generating tag files")))
 
 (defun counsel-gtags--root ()
   "Get gtags root by looking at env vars or looking for GTAGS.
@@ -202,26 +204,19 @@ precedence over default \"--result=grep\"."
   "Get a grep command to be used to filter candidates.
 
 Returns a command without arguments.
-
 Otherwise, returns nil if couldn't find any.
 
 Use `counsel-gtags--grep-commands' to specify a list of commands to be
 checked for availability."
-  (cl-loop
-   for command in (cons grep-command counsel-gtags--grep-commands)
-   for actual-command = (and command
-			     (let ((command-no-args (car
-						     (split-string command))))
-			       (executable-find command-no-args)))
-   for actual-command = (and actual-command
-                             (concat
-                              actual-command " "
-                              (or (cdr (assoc
-                                        (file-name-base actual-command)
-                                        counsel-gtags--grep-commands-no-color-options))
-                                  "--color=never")))
-   while (not actual-command)
-   finally return actual-command))
+  (catch 'path
+    (mapc (lambda (exec)
+	    (let ((path (executable-find exec)))
+	      (when path
+		(throw 'path
+		       (concat path
+			       (cdr (assoc-string exec counsel-gtags--grep-commands-no-color-options)))))))
+	  counsel-gtags--grep-commands)
+    nil))
 
 (defun counsel-gtags--build-command-to-collect-candidates (query &optional extra-args)
   "Build command to collect condidates filtering by QUERY.
@@ -282,7 +277,7 @@ global. Line number is returned as number (and not string)."
         (list (match-string-no-properties 1)
               (string-to-number (match-string-no-properties 2))))
     (let ((fields (split-string candidate ":")))
-      (list (cl-first fields) (string-to-number (or (cl-second fields) "1"))))))
+      (list (car fields) (string-to-number (or (cadr fields) "1"))))))
 
 (defun counsel-gtags--resolve-actual-file-from (file-candidate)
   "Resolve actual file path from CANDIDATE taken from a global cmd query.
@@ -492,9 +487,9 @@ Prompt for TAGNAME if not given."
 Useful for jumping from a location when using global commands (like with
 \"--from-here\")."
   (setq counsel-gtags--original-default-directory
-        (cl-case counsel-gtags-path-style
-          ((relative absolute abslib) default-directory)
-          (root (counsel-gtags--root)))))
+        (cond counsel-gtags-path-style
+              ((relative absolute) default-directory)
+              (root (counsel-gtags--root)))))
 
 (defun counsel-gtags--get-files ()
   "Get a list of all files from global."
@@ -722,7 +717,7 @@ its definition."
       (call-interactively 'counsel-gtags-find-definition))))
 
 (defvar counsel-gtags-mode-name " CounselGtags")
-(defvar counsel-gtags-mode-map (make-sparse-keymap))
+(defvar counsel-gtags-command-map (make-sparse-keymap))
 
 ;;;###autoload
 (define-minor-mode counsel-gtags-mode ()
