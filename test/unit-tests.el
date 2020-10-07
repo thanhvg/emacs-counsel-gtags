@@ -422,7 +422,12 @@ tested with a call to `shell-command-to-string' and `split-string' like
     (should
      (string-suffix-p "rg --color=never" (counsel-gtags--get-grep-command)))))
 
-
+(ert-deftest propertized-argument-confuses-ivy ()
+  "See https://github.com/FelipeLema/emacs-counsel-gtags/issues/15"
+  (should (stringp
+           (counsel-gtags--build-command-to-collect-candidates
+            #("ClusterManager" 0 14 (fontified t face font-lock-constant-face))
+            '("--result=ctags")))))
 
 (provide 'unit-tests)
 ;;; unit-tests.el ends here
