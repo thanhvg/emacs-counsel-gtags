@@ -333,7 +333,7 @@ This is the `:action' callback for `ivy-read' calls."
   `(,(assoc-default type counsel-gtags--prompts)
     counsel-gtags--async-tag-query
     :initial-input ,(and counsel-gtags-use-input-at-point
-			 (thing-at-point 'symbol))
+			 (ivy-thing-at-point))
     :unwind ,(lambda ()
 	       (counsel-delete-process)
 	       (swiper--cleanup))
@@ -711,7 +711,7 @@ database in prompted directory."
 If point is at a definition, find its references, otherwise, find
 its definition."
   (interactive)
-  (let ((cursor-symbol (thing-at-point 'symbol)))
+  (let ((cursor-symbol (thing-at-point 'symbol t)))
     (if (and (buffer-file-name) cursor-symbol)
         (counsel-gtags--from-here (substring-no-properties cursor-symbol))
       (call-interactively 'counsel-gtags-find-definition))))
