@@ -213,12 +213,12 @@ checked for availability."
 	    (let ((path (executable-find exec)))
 	      (when path
 		(throw 'path
-		       (concat path
+		       (concat path " "
 			       (cdr (assoc-string exec counsel-gtags--grep-commands-no-color-options)))))))
 	  counsel-gtags--grep-commands)
     nil))
 
-(defun counsel-gtags--build-command-to-collect-candidates (query &optional extra-args)
+(defun counsel-gtags--build-command-to-collect-candidates (query)
   "Build command to collect condidates filtering by QUERY.
 
 Used in `counsel-gtags--async-tag-query'.  Call global \"list all tags\"
@@ -229,7 +229,7 @@ ivy's default filter `counsel--async-filter' is too slow with lots of tags."
    (mapconcat #'shell-quote-argument
 	      (append
 	       `("global" "-c")
-	       (counsel-gtags--command-options 'definition extra-args))
+	       (counsel-gtags--command-options 'definition '("--result=ctags")))
 	      " ")
    " | "
    (counsel-gtags--get-grep-command) " "
@@ -245,9 +245,9 @@ Input for searching is QUERY.
 
 Since we can't look for tags by regex, we look for their definition and filter
 the location, giving us a list of tags with no locations."
-  (counsel--async-command
-   (counsel-gtags--build-command-to-collect-candidates query
-						       '("--result=ctags"))))
+  (let ((command (counsel-gtags--build-command-to-collect-candidates query)))
+    (message "Command: %s" command)
+    (counsel--async-command command)))
 
 (defun counsel-gtags--async-tag-query (query)
   "Gather the object names asynchronously for `ivy-read'.
