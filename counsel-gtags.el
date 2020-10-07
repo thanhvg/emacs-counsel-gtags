@@ -45,14 +45,16 @@
   "Whether to ignore case in search pattern."
   :type 'boolean)
 
-(defcustom counsel-gtags-path-style 'root
+(defconst counsel-gtags-path-style-alist '('through 'relative 'absolute 'abslib))
+
+(defcustom counsel-gtags-path-style 'through
   "Path style of candidates.
 The following values are supported:
-- `root'     Show path from root of current project.
+- `through'     Show path from root of current project.
 - `relative' Show path from current directory.
 - `absolute' Show absolute path.
 - `abslib' Show absolute path for libraries (GTAGSLIBPATH) and relative path for the rest."
-  :type '(choice (const :tag "Root of the current project" root)
+  :type '(choice (const :tag "Root of the current project" through)
                  (const :tag "Relative from the current directory" relative)
                  (const :tag "Absolute path" absolute)
                  (const :tag "Absolute path for libraries (GTAGSLIBPATH) and relative path for the rest" abslib)))
@@ -131,32 +133,12 @@ By default \"--color=never\" is used.")
   '("default" "native" "ctags" "pygments")
   "List of valid values for gtags labels.")
 
-(defun counsel-gtags--root ()
-  "Get gtags root by looking at env vars or looking for GTAGS.
-
-Will trigger tags generation if not found."
-  (or (getenv "GTAGSROOT")
-      (locate-dominating-file default-directory "GTAGS")
-      (if (yes-or-no-p "File GTAGS not found. Run 'gtags'? ")
-	  (interactive-call counsel-gtags-create-tags)
-	(error "Abort generating tag files"))))
-
-(defsubst counsel-gtags--windows-p ()
-  "Whether we're inside non-free Gates OS."
-  (memq system-type '(windows-nt ms-dos)))
-
 (defun counsel-gtags--file-path-style ()
-  "Return current `counsel-gtags-path-style' option as argument to global cmd.
-
-Kept free of whitespaces."
-  (format "--path-style=%s"
-          (pcase counsel-gtags-path-style
-            ((or 'relative 'absolute 'abslib)
-	     (symbol-name counsel-gtags-path-style))
-            ('root "through")
-            (_
-	     (error "Unexpected counsel-gtags-path-style: %s"
-	            (symbol-name counsel-gtags-path-style))))))
+  "Return current `counsel-gtags-path-style' option as argument to global cmd."
+  (if (memq counsel-gtags-path-style counsel-gtags-path-style-alist)
+      (format "--path-style=%s" (symbol-name counsel-gtags-path-style))
+    (error "Unexpected counsel-gtags-path-style: %s"
+	   (symbol-name counsel-gtags-path-style))))
 
 (defun counsel-gtags--command-options (type &optional extra-options)
   "Get list with options for global command according to TYPE.
@@ -262,7 +244,7 @@ Inspired on ivy.org's `counsel-locate-function'."
 
 Candidates are supposed to be strings of the form \"file:line\" as returned by
 global. Line number is returned as number (and not string)."
-  (if (and (counsel-gtags--windows-p)
+  (if (and (memq system-type '(windows-nt ms-dos))  ;; in MS windows
            (string-match-p "\\`[a-zA-Z]:" candidate)) ;; Windows Driver letter
       (when (string-match "\\`\\([^:]+:[^:]+:\\):\\([^:]+\\)" candidate)
         (list (match-string-no-properties 1)
@@ -479,7 +461,11 @@ Useful for jumping from a location when using global commands (like with
   (setq counsel-gtags--original-default-directory
         (cl-case counsel-gtags-path-style
           ((relative absolute) default-directory)
-          (root (counsel-gtags--root)))))
+          (root (or (getenv "GTAGSROOT")
+		    (locate-dominating-file default-directory "GTAGS")
+		    (if (yes-or-no-p "File GTAGS not found. Run 'gtags'? ")
+			(interactive-call counsel-gtags-create-tags)
+		      (error "Abort generating tag files")))))))
 
 (defun counsel-gtags--get-files ()
   "Get a list of all files from global."
