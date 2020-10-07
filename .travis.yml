@@ -1,6 +1,7 @@
 # taken from https://github.com/abo-abo/tiny/blob/master/.travis.yml
 # see http://sachachua.com/blog/2015/02/continuous-integration-code-coverage-emacs-packages-travis-coveralls/
 language: emacs-lisp
+dist: focal
 before_install:
   # enable ssh
   - ssh-keygen -t rsa -C "<me@mymail>" -f ~/.ssh/id_this_travis_build -P ""
