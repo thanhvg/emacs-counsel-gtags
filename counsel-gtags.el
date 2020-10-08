@@ -83,14 +83,15 @@ searching for a tag."
   "List of extra arguments passed to gtags when updating database."
   :type 'list)
 
-(defcustom counsel-gtags-prefix-key "\C-c"
+(defcustom counsel-gtags-prefix-key (kbd "C-c g")
   "Key binding used for `counsel-gtags-mode-map'.
 This variable does not have any effect unless
 `counsel-gtags-use-suggested-key-map' is non-nil."
   :type 'string)
 
-(defcustom counsel-gtags-use-suggested-key-map nil
-  "Whether to use the suggested key bindings."
+(defcustom counsel-gtags-use-suggested-key-map t
+  "Whether to use the suggested key bindings.
+This variable must be set before enabling the mode"
   :type 'boolean)
 
 (defconst counsel-gtags--prompts
@@ -638,7 +639,12 @@ its definition."
 
 (defvar counsel-gtags-command-map
   (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "g") #'counsel-gtags-dwim)
     (define-key map (kbd "d") #'counsel-gtags-find-definition)
+    (define-key map (kbd "n") #'counsel-gtags-go-forward)
+    (define-key map (kbd "p") #'counsel-gtags-go-backward)
+    (define-key map (kbd "c") #'counsel-gtags-create-tags)
+    (define-key map (kbd "u") #'counsel-gtags-update-tags)
     (define-key map (kbd "r") #'counsel-gtags-find-reference)
     (define-key map (kbd "s") #'counsel-gtags-find-symbol)
     (define-key map (kbd "f") #'counsel-gtags-find-file)
