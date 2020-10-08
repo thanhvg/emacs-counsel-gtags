@@ -151,7 +151,6 @@ precedence over default \"--result=grep\"."
 		   (unless (string-match-p "--result=" extra-options)
 		     "--result=grep ")
 		   extra-options)))
-    (message "%s ||| %s KKKK %s" type extra-options options)
     options))
 
 (defun counsel-gtags--get-grep-command-find ()
@@ -198,7 +197,6 @@ Input for searching is QUERY.
 Since we can't look for tags by regex, we look for their definition and filter
 the location, giving us a list of tags with no locations."
   (let ((command (counsel-gtags--build-command-to-collect-candidates query)))
-    (message "Command: %s" command)
     (counsel--async-command command)))
 
 (defun counsel-gtags--async-tag-query (query)
