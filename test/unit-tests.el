@@ -274,8 +274,7 @@ ORIGINAL-FUN is `find-file'; rest of arguments (ARGS) is the file."
 			   "find . -name '*.c' -or -name '*.h'")
 			  "\n" t)))
       (let ((candidates
-	     (-second-item
-	      (counsel-gtags--find-file-ivy-parameters nil))))
+	     (counsel-gtags--find-file-collection)))
 	(should (equal
 		 candidates
 		 (-sort #'s-less? expected)))))))
@@ -286,21 +285,19 @@ ORIGINAL-FUN is `find-file'; rest of arguments (ARGS) is the file."
 Ivy documentation mentions that any call to `counsel--async-command' can be
 tested with a call to `shell-command-to-string' and `split-string' like
 
-(split-string (shell-command-to-string …)).
-
-"
+(split-string (shell-command-to-string …))."
   (let* ((repo-root-path (locate-dominating-file "./" "counsel-gtags.el"))
 	 (sample-project-path (concat (file-name-as-directory repo-root-path)
        				      "test/sample-project/")))
     (save-window-excursion
       (with-current-buffer (find-file (format "%s/main.c" sample-project-path))
 	(goto-char (point-min))
-	(search-forward "marichiweu"
-			(point-max))
+	(search-forward "marichiweu" (point-max))
 
 	(let* ((type 'symbol) ;; from `counsel-gtags-find-symbol'
-	       (params (counsel-gtags--read-tag-ivy-parameters type))
-	       (query (plist-get params :initial-input ))
+	       ;; expand the macro and removing the commands will keep the parameter
+	       (params (cdr (macroexpand-all '(counsel-gtags--read-tag definition))))
+	       (query (eval (plist-get params :initial-input )))
 	       (raw-string
 		;; see `counsel-gtags--async-tag-query-process'
 		(shell-command-to-string
@@ -374,9 +371,8 @@ tested with a call to `shell-command-to-string' and `split-string' like
 			(tagname "another_global_fun")
 			(extra-options)
 			(auto-select-single-candidate t)
-			(collection (-second-item
-		      		     (counsel-gtags--select-file-ivy-parameters
-				      type tagname extra-options))))
+			(collection (counsel-gtags--select-file-collection
+				      type tagname extra-options)))
 		   (should
 		    (= (length collection) 1))
 		   (cl-multiple-value-bind (the-buffer the-line)

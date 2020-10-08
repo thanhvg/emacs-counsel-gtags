@@ -276,47 +276,24 @@ This is the `:action' callback for `ivy-read' calls."
     (counsel-gtags--push 'from)
     (counsel-gtags--jump-to candidate 'push)))
 
-(defun counsel-gtags--read-tag-ivy-parameters (type)
-  "Get `counsel-gtags--read-tag' the parameters from TYPE to call `ivy-read'."
-  `(,(assoc-default type counsel-gtags--prompts)
-    counsel-gtags--async-tag-query
-    :initial-input ,(and counsel-gtags-use-input-at-point
-			 (ivy-thing-at-point))
-    :unwind ,(lambda ()
-	       (counsel-delete-process)
-	       (swiper--cleanup))
-    :dynamic-collection t))
-
-(defun counsel-gtags--read-tag (type)
+(defmacro counsel-gtags--read-tag (type)
   "Prompt the user for selecting a tag using `ivy-read'.
 
 Returns selected tag
-
 Use TYPE ∈ '(definition reference symbol) for defining global parameters.
 If `counsel-gtags-use-input-at-point' is non-nil, will use symbol at point as
 initial input for `ivy-read'.
 
-TYPE ∈ `counsel-gtags--prompts'
-
 See `counsel-gtags--async-tag-query' for more info."
-  (apply 'ivy-read
-	 (plist-put
-	  (counsel-gtags--read-tag-ivy-parameters type)
-	  :caller 'counsel-gtags--read-tag)))
-
-
-(defun counsel-gtags--tag-directory ()
-  "Get directory from either GTAGSROOT env var or by running global."
-  (with-temp-buffer
-    (or (getenv "GTAGSROOT")
-        (progn
-          (unless (zerop (process-file "global" nil t nil "-p"))
-            (error "GTAGS not found"))
-          (goto-char (point-min))
-          (let ((dir (buffer-substring-no-properties (point) (line-end-position))))
-            (file-name-as-directory (if (eq system-type 'cygwin)
-                                        (cygwin-convert-file-name-from-windows dir)
-                                      dir)))))))
+  `(ivy-read ,(alist-get type counsel-gtags--prompts)
+	     #'counsel-gtags--async-tag-query
+	     :initial-input (and counsel-gtags-use-input-at-point
+				 (ivy-thing-at-point))
+	     :unwind (lambda ()
+		       (counsel-delete-process)
+		       (swiper--cleanup))
+	     :dynamic-collection t
+	     :caller 'counsel-gtags--read-tag))
 
 (defun counsel-gtags--process-lines (command args)
   "Like `process-lines' on COMMAND and ARGS, but using `process-file'.
@@ -357,19 +334,12 @@ This is for internal use and not for final user."
 			  (`definition '())
 			  (_ (shell-quote-argument tagname))))
 	 (global-args (concat options query-as-list)))
-  (counsel-gtags--process-lines "global" global-args)))
+    (counsel-gtags--process-lines "global" global-args)))
 
-(defun counsel-gtags--select-file-ivy-parameters (type tagname extra-options)
-  "Get `counsel-gtags--select-file' the parameters from TYPE to call `ivy-read'."
-  (if (string-empty-p tagname)
-      (message "No candidate tags")
-    (let* ((root (counsel-gtags--default-directory))
-           (default-directory root)
-           (collection (counsel-gtags--collect-candidates
-			type tagname buffer-file-coding-system extra-options))
-           (ivy-auto-select-single-candidate t)) ;; see issue #7
-
-      `("Pattern: " ,collection :action counsel-gtags--find-file))))
+(defsubst counsel-gtags--select-file-collection (type tagname extra-options)
+  "Candidated collection for counsel-gtags--select-file."
+  (counsel-gtags--collect-candidates
+   type tagname buffer-file-coding-system extra-options))
 
 (defun counsel-gtags--select-file (type tagname
 					&optional extra-options auto-select-only-candidate)
@@ -379,21 +349,23 @@ Use TYPE ∈ '(definition reference symbol) for defining global parameters.
 Use TAGNAME for global query.
 Use AUTO-SELECT-ONLY-CANDIDATE to skip `ivy-read' if have a single candidate.
 Extra command line parameters to global are forwarded through EXTRA-OPTIONS."
-  (let* ((the-ivy-arguments
-	  (counsel-gtags--select-file-ivy-parameters type tagname (or extra-options "")))
-	 (collection (cadr the-ivy-arguments)))
+  (let* ((default-directory (counsel-gtags--default-directory))
+	 (collection (counsel-gtags--select-file-collection type tagname extra-options))
+	 (ivy-auto-select-single-candidate t)
+	 (first (cadr collection)))
     (if (and auto-select-only-candidate (= (length collection) 1))
-        (counsel-gtags--find-file (car collection))
-      (apply 'ivy-read (plist-put
-			the-ivy-arguments
-			:caller 'counsel-gtags--select-file)))))
+        (counsel-gtags--find-file (car first))
+      (ivy-read "Pattern: "
+		collection
+		:action #'counsel-gtags--find-file
+		:caller 'counsel-gtags--select-file))))
 
 ;;;###autoload
 (defun counsel-gtags-find-definition (tagname)
   "Search for TAGNAME definition in tag database.
 Prompt for TAGNAME if not given."
   (interactive
-   (list (counsel-gtags--read-tag 'definition)))
+   (list (counsel-gtags--read-tag definition)))
   (counsel-gtags--select-file 'definition tagname))
 
 ;;;###autoload
@@ -401,7 +373,7 @@ Prompt for TAGNAME if not given."
   "Search for TAGNAME reference in tag database.
 Prompt for TAGNAME if not given."
   (interactive
-   (list (counsel-gtags--read-tag 'reference)))
+   (list (counsel-gtags--read-tag reference)))
   (counsel-gtags--select-file 'reference tagname))
 
 ;;;###autoload
@@ -409,7 +381,7 @@ Prompt for TAGNAME if not given."
   "Search for TAGNAME symbol in tag database.
 Prompt for TAGNAME if not given."
   (interactive
-   (list (counsel-gtags--read-tag 'symbol)))
+   (list (counsel-gtags--read-tag symbol)))
   (counsel-gtags--select-file 'symbol tagname))
 
 
@@ -435,26 +407,21 @@ Useful for jumping from a location when using global commands (like with
 			   (interactive-call counsel-gtags-create-tags)
 			 (error "Abort generating tag files")))))))
 
-
-(defun counsel-gtags--find-file-ivy-parameters (filename)
-  "Get `counsel-gtags-find-file' the parameters from FILENAME to call `ivy-read'."
-
-  (let* ((initial-input (or filename (counsel-gtags--include-file)))
-         (collection (counsel-gtags--collect-candidates
-		      'file nil buffer-file-coding-system "--result=path ")))
-    `("Find File: "
-      ,collection
-      :initial-input ,initial-input
-      :action counsel-gtags--find-file)))
+(defsubst counsel-gtags--find-file-collection()
+  "Candidated for counsel-gtags-find-file."
+  (counsel-gtags--collect-candidates
+   'file nil buffer-file-coding-system "--result=path "))
 
 ;;;###autoload
 (defun counsel-gtags-find-file (&optional filename)
   "Search/narrow for FILENAME among tagged files."
   (interactive)
-  (apply 'ivy-read
-	 (plist-put
-	  (counsel-gtags--find-file-ivy-parameters filename)
-	  :caller 'counsel-gtags-find-file)))
+  (let* ((initial-input (or filename (counsel-gtags--include-file)))
+         (collection (counsel-gtags--find-file-collection)))
+    (ivy-read "Find File: " collection
+	      :initial-input initial-input
+	      :action #'counsel-gtags--find-file
+	      :caller 'counsel-gtags-find-file)))
 
 (defun counsel-gtags--goto (position)
   "Go to POSITION in context stack.
