@@ -302,7 +302,6 @@ See `counsel-gtags--async-tag-query' for more info."
 	  :caller 'counsel-gtags--read-tag)))
 
 
-
 (defun counsel-gtags--tag-directory ()
   "Get directory from either GTAGSROOT env var or by running global."
   (with-temp-buffer
@@ -644,7 +643,7 @@ database in prompted directory."
   (let* ((line (line-number-at-pos))
          (root (counsel-gtags--remote-truename (counsel-gtags--default-directory)))
          (file (counsel-gtags--remote-truename))
-         (from-here-opt (format "--from-here=%d:%s" line (file-relative-name file root))))
+         (from-here-opt (format "--from-here=%d:%s " line (file-relative-name file root))))
     (counsel-gtags--select-file 'from-here tagname from-here-opt t)))
 
 ;;;###autoload
