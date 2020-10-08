@@ -89,11 +89,9 @@ This variable does not have any effect unless
 `counsel-gtags-use-suggested-key-map' is non-nil."
   :type 'string)
 
-(defvaralias 'counsel-gtags-suggested-key-mapping 'counsel-gtags-use-suggested-key-map)
 (defcustom counsel-gtags-use-suggested-key-map nil
   "Whether to use the suggested key bindings."
   :type 'boolean)
-(make-obsolete-variable 'counsel-gtags-suggested-key-mapping 'counsel-gtags-use-suggested-key-map "0.01")
 
 (defconst counsel-gtags--prompts
   '((definition . "Find Definition: ")
@@ -133,6 +131,9 @@ By default \"--color=never\" is used.")
   '("default" "native" "ctags" "pygments")
   "List of valid values for gtags labels.")
 
+(defconst counsel-gtags--include-regexp
+  "\\`\\s-*#\\(?:include\\|import\\)\\s-*[\"<]\\(?:[./]*\\)?\\(.*?\\)[\">]")
+
 (defun counsel-gtags--file-path-style ()
   "Return current `counsel-gtags-path-style' option as argument to global cmd."
   (if (memq counsel-gtags-path-style counsel-gtags-path-style-alist)
@@ -145,33 +146,24 @@ By default \"--color=never\" is used.")
 
 Prepend EXTRA-OPTIONS.  If \"--result=.\" is in EXTRA-OPTIONS, it will have
 precedence over default \"--result=grep\"."
-  (let* ((options extra-options)
-	 (has-result (seq-filter (lambda (opt)
-				   (and (stringp opt)
-					(string-prefix-p "--result=" opt)))
-				 options)))
-    (unless has-result
-      (setq options (append '("--result=grep") options)))
+  (let* ((options extra-options))
+    (unless (seq-filter (lambda (opt)
+			  (and (stringp opt)
+			       (string-match "--result=" opt)))
+			options)
+      (push "--result=grep" options)))
     (let ((opt (assoc-default type counsel-gtags--complete-options)))
       (when opt
         (push opt options)))
     (push (counsel-gtags--file-path-style) options)
     (when counsel-gtags-ignore-case
       (push "-i" options))
-    (when current-prefix-arg ;; XXX
+    (when current-prefix-arg ;; Tags only under local directory
       (push "-l" options))
     (when (getenv "GTAGSLIBPATH")
       (push "-T" options))
     (message "Options: %s" options)
-    options))
-
-(defun counsel-gtags--string-looks-like-regex (s)
-  "Return non-nil if S has special regex characters."
-  (and s
-       (save-match-data
-	 (string-match (rx (any "." "^" "*" "+" "?" "{" "}" "[" "]"
-				"$" "(" ")"))
-		       s))))
+    options)
 
 (defun counsel-gtags--get-grep-command ()
   "Get a grep command to be used to filter candidates.
@@ -204,8 +196,7 @@ ivy's default filter `counsel--async-filter' is too slow with lots of tags."
 	       `("global" "-c")
 	       (counsel-gtags--command-options 'definition '("--result=ctags")))
 	      " ")
-   " | "
-   (counsel-gtags--get-grep-command) " "
+   " | " (counsel-gtags--get-grep-command) " "
    (thread-last (ivy--regex query)
      (counsel--elisp-to-pcre)
      (shell-quote-argument))))
@@ -442,9 +433,6 @@ Prompt for TAGNAME if not given."
   (interactive
    (list (counsel-gtags--read-tag 'symbol)))
   (counsel-gtags--select-file 'symbol tagname))
-
-(defconst counsel-gtags--include-regexp
-  "\\`\\s-*#\\(?:include\\|import\\)\\s-*[\"<]\\(?:[./]*\\)?\\(.*?\\)[\">]")
 
 (defun counsel-gtags--include-file ()
   "Get ⎡#include …⎦ from first line."
