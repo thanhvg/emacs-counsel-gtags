@@ -455,6 +455,22 @@ Useful for jumping from a location when using global commands (like with
 	  (counsel-gtags--find-file-ivy-parameters filename)
 	  :caller 'counsel-gtags-find-file)))
 
+(defun counsel-gtags--goto (position)
+  "Go to POSITION in context stack.
+Return t on success, nil otherwise."
+  (let ((context (nth position counsel-gtags--context)))
+    (when (and context
+               (cond
+                ((plist-get context :file)
+                 (find-file (plist-get context :file)))
+                ((and (plist-get context :buffer)
+                      (buffer-live-p (plist-get context :buffer)))
+                 (switch-to-buffer (plist-get context :buffer)))
+                (t nil)))
+      (goto-char (point-min))
+      (forward-line (1- (plist-get context :line)))
+      t)))
+
 ;;;###autoload
 (defun counsel-gtags-go-backward ()
   "Go to previous position in context stack."
@@ -468,8 +484,6 @@ Useful for jumping from a location when using global commands (like with
         (when (counsel-gtags--goto position)
           (setq counsel-gtags--context-position position)
           (throw 'exit t))))))
-(defalias 'counsel-gtags-pop 'counsel-gtags-go-backward)
-(make-obsolete 'counsel-gtags-pop 'counsel-gtags-go-backward "0.01")
 
 ;;;###autoload
 (defun counsel-gtags-go-forward ()
@@ -483,23 +497,6 @@ Useful for jumping from a location when using global commands (like with
         (when (counsel-gtags--goto position)
           (setq counsel-gtags--context-position position)
           (throw 'exit t))))))
-
-(defun counsel-gtags--goto (position)
-  "Go to POSITION in context stack.
-Return t on success, nil otherwise."
-  (let ((context (nth position counsel-gtags--context)))
-    (when (and context
-               (cond
-                ((plist-get context :file)
-                 (find-file (plist-get context :file)))
-                ((and (plist-get context :buffer)
-                      (buffer-live-p (plist-get context :buffer)))
-                 (switch-to-buffer (plist-get context :buffer)))
-                (t
-                 nil)))
-      (goto-char (point-min))
-      (forward-line (1- (plist-get context :line)))
-      t)))
 
 (defun counsel-gtags--push (direction)
   "Add new entry to context stack.
