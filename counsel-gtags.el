@@ -113,19 +113,20 @@ This variable does not have any effect unless
 (defvar counsel-gtags--original-default-directory nil
   "Last `default-directory' where command is invoked.")
 
+(defvar-local counsel-gtags--get-grep-command nil)
+
 (defconst counsel-gtags--grep-commands '("rg" "ag" "grep")
   "List of grep-like commands to filter candidates.
 The first command available is used to do the filtering.  `grep-command', if
 non-nil and available, has a higher priority than any entries in this list.
-Use `counsel-gtags--grep-commands-no-color-options' to specify the options
+Use `counsel-gtags--grep-options' to specify the options
 to suppress colored output.")
 
-(defconst counsel-gtags--grep-commands-no-color-options
+(defconst counsel-gtags--grep-options
   '(("rg" . "--color never")
     ("ag" . "--nocolor")
     ("grep" . "--color=never"))
-  "List of grep-like commands with their options to suppress colored output.
-By default \"--color=never\" is used.")
+  "List of grep-like commands with their options to suppress colored output.")
 
 (defconst counsel-gtags--labels
   '("default" "native" "ctags" "pygments")
@@ -151,7 +152,7 @@ precedence over default \"--result=grep\"."
 		   extra-options)))
     options))
 
-(defun counsel-gtags--get-grep-command ()
+(defun counsel-gtags--get-grep-command-find ()
   "Get a grep command to be used to filter candidates.
 
 Returns a command without arguments.
@@ -159,28 +160,30 @@ Otherwise, returns nil if couldn't find any.
 
 Use `counsel-gtags--grep-commands' to specify a list of commands to be
 checked for availability."
-  (catch 'path
-    (mapc (lambda (exec)
-	    (let ((path (executable-find exec)))
-	      (when path
-		(throw 'path
-		       (concat path " "
-			       (cdr (assoc-string exec counsel-gtags--grep-commands-no-color-options)))))))
-	  counsel-gtags--grep-commands)
-    nil))
+  (or counsel-gtags--get-grep-command        ;; Search only the first time
+      (setq counsel-gtags--get-grep-command
+	    (catch 'path
+	      (mapc (lambda (exec)
+		      (let ((path (executable-find exec)))
+			(when path
+			  (throw 'path
+				 (concat path " "
+					 (cdr (assoc-string exec counsel-gtags--grep-options)))))))
+		    counsel-gtags--grep-commands)
+	      nil))))
 
 (defun counsel-gtags--build-command-to-collect-candidates (query)
   "Build command to collect condidates filtering by QUERY.
 
 Used in `counsel-gtags--async-tag-query'.  Call global \"list all tags\"
 \(with EXTRA-ARGS\), forward QUERY to grep command (provided by
-`counsel-gtags--get-grep-command') to filter.  We use grep command because using
+`counsel-gtags--get-grep-command-find') to filter.  We use grep command because using
 ivy's default filter `counsel--async-filter' is too slow with lots of tags."
   (concat
    "global -c "
    (counsel-gtags--command-options 'definition "--result=ctags")
    " | "
-   (counsel-gtags--get-grep-command)
+   (counsel-gtags--get-grep-command-find)
    " "
    (shell-quote-argument (counsel--elisp-to-pcre (ivy--regex query)))))
 
