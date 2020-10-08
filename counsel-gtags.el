@@ -141,16 +141,18 @@ to suppress colored output.")
 
 Prepend EXTRA-OPTIONS.  If \"--result=.\" is in EXTRA-OPTIONS, it will have
 precedence over default \"--result=grep\"."
-  (let* ((options (concat
+  (let* ((extra (or (and (stringp extra-options) extra-options)
+		    " "))
+	 (options (concat
 		   (and (getenv "GTAGSLIBPATH") "-T ")
 		   (and current-prefix-arg "-l ")
 		   (and counsel-gtags-ignore-case "-i ")
 		   (and (memq counsel-gtags-path-style counsel-gtags-path-style-alist)
 			(format "--path-style=%s " (symbol-name counsel-gtags-path-style)))
 		   (assoc-default type counsel-gtags--complete-options) " "
-		   (unless (string-match-p "--result=" extra-options)
+		   (unless (string-match-p "--result=" extra)
 		     "--result=grep ")
-		   extra-options)))
+		   extra)))
     options))
 
 (defun counsel-gtags--get-grep-command-find ()

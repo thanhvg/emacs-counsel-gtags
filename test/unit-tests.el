@@ -172,14 +172,14 @@ int main{
 
 (ert-deftest 00-environment-have-grep-command ()
   "Assert that we have a grep tool of any kind"
-  (should (counsel-gtags--get-grep-command)))
+  (should (counsel-gtags--get-grep-command-find)))
 
 ;;;;;;;;;;;;;;;;;
 ;; Actual testing
 ;;;;;;;;;;;;;;;;;
 (ert-deftest correct-collection-of-candidates ()
   (counsel-gtags--with-mock-project
-   (let* ((counsel-gtags-path-style 'root)
+   (let* ((counsel-gtags-path-style 'through)
 	  (root (counsel-gtags--default-directory))
           (default-directory root)
 	  (type 'definition)
@@ -229,7 +229,7 @@ No queries to global involved."
   "Handling of results for file queries (global … -P …).
 
 All file candidates"
-  (let* ((counsel-gtags-path-style 'root)
+  (let* ((counsel-gtags-path-style 'through)
 	 (repo-root-path (locate-dominating-file "./" "counsel-gtags.el"))
 	 (sample-project-path (concat (file-name-as-directory repo-root-path)
 				      "test/sample-project"))
@@ -240,7 +240,8 @@ All file candidates"
          (encoding (or buffer-file-coding-system
 		       "utf-8-unix")))
     (should encoding)
-    (let* ((candidates (counsel-gtags--get-files))
+    (let* ((candidates (counsel-gtags--collect-candidates
+		      'file nil buffer-file-coding-system "--result=path "))
 	   (actual-path-per-candidate (--map (counsel-gtags--resolve-actual-file-from it)
 					     candidates))
 	   (each-candidate-exist (-map #'file-exists-p actual-path-per-candidate)))
@@ -264,7 +265,7 @@ ORIGINAL-FUN is `find-file'; rest of arguments (ARGS) is the file."
 	   (sample-project-path (concat (file-name-as-directory repo-root-path)
 					"test/sample-project/"))
 	   ;; configure test
-	   (counsel-gtags-path-style 'root)
+	   (counsel-gtags-path-style 'through)
 	   (default-directory sample-project-path)
 	   (expected
 	    (split-string (shell-command-to-string
@@ -302,9 +303,7 @@ tested with a call to `shell-command-to-string' and `split-string' like
 	       (raw-string
 		;; see `counsel-gtags--async-tag-query-process'
 		(shell-command-to-string
-		 (counsel-gtags--build-command-to-collect-candidates
-		  query
-		  '("--result=ctags")))))
+		 (counsel-gtags--build-command-to-collect-candidates query))))
 	  (should
 	   (string-equal "marichiweu\n" ;; single line
 			 (replace-regexp-in-string (rx (* (char space)) line-end)
@@ -321,7 +320,7 @@ tested with a call to `shell-command-to-string' and `split-string' like
      (unwind-protect;; https://curiousprogrammer.wordpress.com/2009/06/08/error-handling-in-emacs-lisp/
 	 (let ((remote-buffer
 		(find-file (format "/ssh:localhost:%s"
-			      (file-truename main-file-path)))))
+				   (file-truename main-file-path)))))
 	   ;; I expect `find-file' returns the new buffer
 	   (should (bufferp remote-buffer))
 	   (with-current-buffer remote-buffer
@@ -376,7 +375,7 @@ tested with a call to `shell-command-to-string' and `split-string' like
 			(auto-select-single-candidate t)
 			(collection (-second-item
 		      		     (counsel-gtags--select-file-ivy-parameters
-				      type tagname extra-options auto-select-single-candidate))))
+				      type tagname extra-options))))
 		   (should
 		    (= (length collection) 1))
 		   (cl-multiple-value-bind (the-buffer the-line)
@@ -392,7 +391,7 @@ tested with a call to `shell-command-to-string' and `split-string' like
        (let* ((type 'definition)
 	      (query "the_")
 	      (query-command
-	       (counsel-gtags--build-command-to-collect-candidates query '("--result=ctags")))
+	       (counsel-gtags--build-command-to-collect-candidates query))
 	      (collected-results
 	       (s-split "\n" (shell-command-to-string query-command) t)))
 	 (should
@@ -406,21 +405,21 @@ tested with a call to `shell-command-to-string' and `split-string' like
   (ert--skip-unless (executable-find "ag"))
   (let ((counsel-gtags--grep-commands '("ag" "grep" "rg")))
     (should
-     (string-suffix-p "ag --nocolor" (counsel-gtags--get-grep-command)))))
+     (string-suffix-p "ag --nocolor" (counsel-gtags--get-grep-command-find)))))
 
 (ert-deftest correct-no-color-option-for-grep ()
   "See https://github.com/FelipeLema/emacs-counsel-gtags/issues/11"
   (ert--skip-unless (executable-find "grep"))
   (let ((counsel-gtags--grep-commands '("grep" "rg" "ag")))
     (should
-     (string-suffix-p "grep --color=never" (counsel-gtags--get-grep-command)))))
+     (string-suffix-p "grep --color=never" (counsel-gtags--get-grep-command-find)))))
 
 (ert-deftest correct-no-color-option-for-rg ()
   "See https://github.com/FelipeLema/emacs-counsel-gtags/issues/11"
   (ert--skip-unless (executable-find "rg"))
   (let ((counsel-gtags--grep-commands '("rg" "ag" "grep")))
     (should
-     (string-suffix-p "rg --color=never" (counsel-gtags--get-grep-command)))))
+     (string-suffix-p "rg --color never" (counsel-gtags--get-grep-command-find)))))
 
 (ert-deftest propertized-argument-confuses-ivy ()
   "See https://github.com/FelipeLema/emacs-counsel-gtags/issues/15"
