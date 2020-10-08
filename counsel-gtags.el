@@ -45,7 +45,7 @@
   "Whether to ignore case in search pattern."
   :type 'boolean)
 
-(defconst counsel-gtags-path-style-alist '('through 'relative 'absolute 'abslib))
+(defconst counsel-gtags-path-style-alist '(through relative absolute abslib))
 
 (defcustom counsel-gtags-path-style 'through
   "Path style of candidates.
@@ -134,36 +134,23 @@ By default \"--color=never\" is used.")
 (defconst counsel-gtags--include-regexp
   "\\`\\s-*#\\(?:include\\|import\\)\\s-*[\"<]\\(?:[./]*\\)?\\(.*?\\)[\">]")
 
-(defun counsel-gtags--file-path-style ()
-  "Return current `counsel-gtags-path-style' option as argument to global cmd."
-  (if (memq counsel-gtags-path-style counsel-gtags-path-style-alist)
-      (format "--path-style=%s" (symbol-name counsel-gtags-path-style))
-    (error "Unexpected counsel-gtags-path-style: %s"
-	   (symbol-name counsel-gtags-path-style))))
-
-(defun counsel-gtags--command-options (type &optional extra-options)
+(defun counsel-gtags--command-options (type extra-options)
   "Get list with options for global command according to TYPE.
 
 Prepend EXTRA-OPTIONS.  If \"--result=.\" is in EXTRA-OPTIONS, it will have
 precedence over default \"--result=grep\"."
-  (let* ((options extra-options))
-    (unless (seq-filter (lambda (opt)
-			  (and (stringp opt)
-			       (string-match "--result=" opt)))
-			options)
-      (push "--result=grep" options)))
-    (let ((opt (assoc-default type counsel-gtags--complete-options)))
-      (when opt
-        (push opt options)))
-    (push (counsel-gtags--file-path-style) options)
-    (when counsel-gtags-ignore-case
-      (push "-i" options))
-    (when current-prefix-arg ;; Tags only under local directory
-      (push "-l" options))
-    (when (getenv "GTAGSLIBPATH")
-      (push "-T" options))
-    (message "Options: %s" options)
-    options)
+  (let* ((options (concat
+		   (and (getenv "GTAGSLIBPATH") "-T ")
+		   (and current-prefix-arg "-l ")
+		   (and counsel-gtags-ignore-case "-i ")
+		   (and (memq counsel-gtags-path-style counsel-gtags-path-style-alist)
+			(format "--path-style=%s " (symbol-name counsel-gtags-path-style)))
+		   (assoc-default type counsel-gtags--complete-options) " "
+		   (unless (string-match-p "--result=" extra-options)
+		     "--result=grep ")
+		   extra-options)))
+    (message "Options: %s %s | %s" type extra-options options)
+    options))
 
 (defun counsel-gtags--get-grep-command ()
   "Get a grep command to be used to filter candidates.
@@ -191,15 +178,12 @@ Used in `counsel-gtags--async-tag-query'.  Call global \"list all tags\"
 `counsel-gtags--get-grep-command') to filter.  We use grep command because using
 ivy's default filter `counsel--async-filter' is too slow with lots of tags."
   (concat
-   (mapconcat #'shell-quote-argument
-	      (append
-	       `("global" "-c")
-	       (counsel-gtags--command-options 'definition '("--result=ctags")))
-	      " ")
-   " | " (counsel-gtags--get-grep-command) " "
-   (thread-last (ivy--regex query)
-     (counsel--elisp-to-pcre)
-     (shell-quote-argument))))
+   "global -c "
+   (counsel-gtags--command-options 'definition "--result=ctags")
+   " | "
+   (counsel-gtags--get-grep-command)
+   " "
+   (shell-quote-argument (counsel--elisp-to-pcre (ivy--regex query)))))
 
 
 (defun counsel-gtags--async-tag-query-process (query)
@@ -253,7 +237,7 @@ Note: candidates are handled as ⎡file:location⎦ and ⎡(file . location)⎦.
 	  (pcase counsel-gtags-path-style
 	    ((or 'relative 'absolute 'abslib)
 	     "")
-	    ('root
+	    ('through
 	     (file-name-as-directory
 	      (counsel-gtags--default-directory)))
 	    (_
@@ -335,7 +319,7 @@ See `counsel-gtags--async-tag-query' for more info."
                                         (cygwin-convert-file-name-from-windows dir)
                                       dir)))))))
 
-(defun counsel-gtags--process-lines (command &rest args)
+(defun counsel-gtags--process-lines (command args)
   "Like `process-lines' on COMMAND and ARGS, but using `process-file'.
 
 `process-lines' does not support Tramp because it uses `call-process'.  Using
@@ -346,15 +330,14 @@ See `counsel-gtags--async-tag-query' for more info."
     ;; but for now it is better to keep it like this for debugging purposed
     ;; between calls
     (with-current-buffer global-run-buffer
-      (erase-buffer))
-    (apply #'process-file command
-	   nil ;; no input file
-	   global-run-buffer;;BUFFER
-	   nil ;;DISPLAY
-	   args)
-    (with-current-buffer global-run-buffer
-      (split-string
-       (buffer-string) "\n" t))))
+      (erase-buffer)
+      (apply #'process-file command
+	     nil    ;; no input file
+	     t      ;;Current BUFFER
+	     nil    ;;DISPLAY
+	     (split-string args))
+
+      (split-string (buffer-string) "\n" t))))
 
 (defun counsel-gtags--collect-candidates (type tagname encoding extra-options)
   "Collect lines for ⎡global …⎦ using TAGNAME as query.
@@ -373,9 +356,10 @@ This is for internal use and not for final user."
 			  ((pred null) '())
 			  ("" '())
 			  (`definition '())
-			  (_ (list tagname))))
-	 (global-args (append (reverse options) query-as-list)))
-    (apply #'counsel-gtags--process-lines "global" global-args)))
+			  (_ (shell-quote-argument tagname))))
+	 (global-args (concat options query-as-list)))
+  (message "counsel-gtags--process-lines: %s ||| %s" options global-args)
+  (counsel-gtags--process-lines "global" global-args)))
 
 (defun counsel-gtags--select-file-ivy-parameters (type tagname extra-options)
   "Get `counsel-gtags--select-file' the parameters from TYPE to call `ivy-read'."
@@ -384,14 +368,14 @@ This is for internal use and not for final user."
     (let* ((root (counsel-gtags--default-directory))
            (encoding buffer-file-coding-system)
            (default-directory root)
-           (collection (counsel-gtags--collect-candidates
-			type tagname encoding extra-options))
+           (collection (counsel-gtags--collect-candidates type tagname encoding extra-options))
            (ivy-auto-select-single-candidate t) ;; see issue #7
            )
       `("Pattern: " ,collection
         :action counsel-gtags--find-file))))
 
-(defun counsel-gtags--select-file (type tagname &optional extra-options auto-select-only-candidate)
+(defun counsel-gtags--select-file (type tagname
+					&optional extra-options auto-select-only-candidate)
   "Prompt the user to select a file_path:position according to query.
 
 Use TYPE ∈ '(definition reference symbol) for defining global parameters.
@@ -401,7 +385,7 @@ Extra command line parameters to global are forwarded through EXTRA-OPTIONS."
   (let* ((the-ivy-arguments
 	  (counsel-gtags--select-file-ivy-parameters type
 						     tagname
-						     extra-options))
+						     (or extra-options "")))
 	 (collection (cadr the-ivy-arguments)))
     (if (and auto-select-only-candidate (= (length collection) 1))
         (counsel-gtags--find-file (car collection))
@@ -449,20 +433,18 @@ Useful for jumping from a location when using global commands (like with
   (setq counsel-gtags--original-default-directory
         (cl-case counsel-gtags-path-style
           ((relative absolute) default-directory)
-          (root (or (getenv "GTAGSROOT")
-		    (locate-dominating-file default-directory "GTAGS")
-		    (if (yes-or-no-p "File GTAGS not found. Run 'gtags'? ")
-			(interactive-call counsel-gtags-create-tags)
-		      (error "Abort generating tag files")))))))
+          (through (or (getenv "GTAGSROOT")
+		       (locate-dominating-file default-directory "GTAGS")
+		       ;; If file doesn't exist create it
+		       (if (yes-or-no-p "File GTAGS not found. Run 'gtags'? ")
+			   (interactive-call counsel-gtags-create-tags)
+			 (error "Abort generating tag files")))))))
 
 (defun counsel-gtags--get-files ()
   "Get a list of all files from global."
   (let* ((encoding buffer-file-coding-system)
-	 (candidates (counsel-gtags--collect-candidates
-		      'file
-		      nil ;; match any
-		      encoding
-		      nil))
+	 (candidates
+	  (counsel-gtags--collect-candidates 'file nil encoding ""))
 	 (files (mapcar (lambda (candidate)
 			  (cl-multiple-value-bind (file-path _)
 			      (counsel-gtags--file-and-line candidate)
@@ -667,7 +649,7 @@ database in prompted directory."
          (root (counsel-gtags--remote-truename (counsel-gtags--default-directory)))
          (file (counsel-gtags--remote-truename))
          (from-here-opt (format "--from-here=%d:%s" line (file-relative-name file root))))
-    (counsel-gtags--select-file 'from-here tagname (list from-here-opt) t)))
+    (counsel-gtags--select-file 'from-here tagname from-here-opt t)))
 
 ;;;###autoload
 (defun counsel-gtags-dwim ()
