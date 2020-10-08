@@ -150,6 +150,7 @@ precedence over default \"--result=grep\"."
 		   (unless (string-match-p "--result=" extra-options)
 		     "--result=grep ")
 		   extra-options)))
+    (message "%s ||| %s KKKK %s" type extra-options options)
     options))
 
 (defun counsel-gtags--get-grep-command-find ()
@@ -196,6 +197,7 @@ Input for searching is QUERY.
 Since we can't look for tags by regex, we look for their definition and filter
 the location, giving us a list of tags with no locations."
   (let ((command (counsel-gtags--build-command-to-collect-candidates query)))
+    (message "Command: %s" command)
     (counsel--async-command command)))
 
 (defun counsel-gtags--async-tag-query (query)
@@ -361,13 +363,12 @@ This is for internal use and not for final user."
   (if (string-empty-p tagname)
       (message "No candidate tags")
     (let* ((root (counsel-gtags--default-directory))
-           (encoding buffer-file-coding-system)
            (default-directory root)
-           (collection (counsel-gtags--collect-candidates type tagname encoding extra-options))
-           (ivy-auto-select-single-candidate t) ;; see issue #7
-           )
-      `("Pattern: " ,collection
-        :action counsel-gtags--find-file))))
+           (collection (counsel-gtags--collect-candidates
+			type tagname buffer-file-coding-system extra-options))
+           (ivy-auto-select-single-candidate t)) ;; see issue #7
+
+      `("Pattern: " ,collection :action counsel-gtags--find-file))))
 
 (defun counsel-gtags--select-file (type tagname
 					&optional extra-options auto-select-only-candidate)
@@ -378,13 +379,10 @@ Use TAGNAME for global query.
 Use AUTO-SELECT-ONLY-CANDIDATE to skip `ivy-read' if have a single candidate.
 Extra command line parameters to global are forwarded through EXTRA-OPTIONS."
   (let* ((the-ivy-arguments
-	  (counsel-gtags--select-file-ivy-parameters type
-						     tagname
-						     (or extra-options "")))
+	  (counsel-gtags--select-file-ivy-parameters type tagname (or extra-options "")))
 	 (collection (cadr the-ivy-arguments)))
     (if (and auto-select-only-candidate (= (length collection) 1))
         (counsel-gtags--find-file (car collection))
-      ;; else
       (apply 'ivy-read (plist-put
 			the-ivy-arguments
 			:caller 'counsel-gtags--select-file)))))
@@ -413,6 +411,7 @@ Prompt for TAGNAME if not given."
    (list (counsel-gtags--read-tag 'symbol)))
   (counsel-gtags--select-file 'symbol tagname))
 
+
 (defun counsel-gtags--include-file ()
   "Get ⎡#include …⎦ from first line."
   (let ((line (buffer-substring-no-properties
@@ -435,26 +434,13 @@ Useful for jumping from a location when using global commands (like with
 			   (interactive-call counsel-gtags-create-tags)
 			 (error "Abort generating tag files")))))))
 
-(defun counsel-gtags--get-files ()
-  "Get a list of all files from global."
-  (let* ((encoding buffer-file-coding-system)
-	 (candidates
-	  (counsel-gtags--collect-candidates 'file nil encoding ""))
-	 (files (mapcar (lambda (candidate)
-			  (cl-multiple-value-bind (file-path _)
-			      (counsel-gtags--file-and-line candidate)
-			    file-path))
-			candidates
-			)))
-    (cl-remove-duplicates files
-			  :test #'string-equal)))
 
 (defun counsel-gtags--find-file-ivy-parameters (filename)
   "Get `counsel-gtags-find-file' the parameters from FILENAME to call `ivy-read'."
 
-  (let* ((initial-input (or filename
-			    (counsel-gtags--include-file)))
-         (collection (counsel-gtags--get-files)))
+  (let* ((initial-input (or filename (counsel-gtags--include-file)))
+         (collection (counsel-gtags--collect-candidates
+		      'file nil buffer-file-coding-system "--result=path ")))
     `("Find File: "
       ,collection
       :initial-input ,initial-input
@@ -467,7 +453,7 @@ Useful for jumping from a location when using global commands (like with
   (apply 'ivy-read
 	 (plist-put
 	  (counsel-gtags--find-file-ivy-parameters filename)
-	  :caller 'counsel-gtags-find-file-name)))
+	  :caller 'counsel-gtags-find-file)))
 
 ;;;###autoload
 (defun counsel-gtags-go-backward ()
