@@ -209,11 +209,10 @@ Because «global -c» only accepts letters-and-numbers, we actually search for
 tags matching QUERY, but filter the list.
 
 Inspired on ivy.org's `counsel-locate-function'."
-  (or
-   (ivy-more-chars)
-   (progn
-     (counsel-gtags--async-tag-query-process query)
-     '("" "Filtering …"))))
+  (or (ivy-more-chars)
+      (progn
+	(counsel-gtags--async-tag-query-process query)
+	'("" "Filtering …"))))
 
 (defun counsel-gtags--file-and-line (candidate)
   "Return list with file and position per CANDIDATE.
@@ -236,15 +235,12 @@ Note: candidates are handled as ⎡file:location⎦ and ⎡(file . location)⎦.
   (let ((file-path-per-style
 	 (concat
 	  (pcase counsel-gtags-path-style
-	    ((or 'relative 'absolute 'abslib)
-	     "")
-	    ('through
-	     (file-name-as-directory
-	      (counsel-gtags--default-directory)))
-	    (_
-	     (error
-	      "Unexpected counsel-gtags-path-style: %s"
-	      (symbol-name counsel-gtags-path-style))))
+	    ((or 'relative 'absolute 'abslib) "")
+	    ('through (file-name-as-directory
+		       (counsel-gtags--default-directory)))
+	    (_ (error
+		"Unexpected counsel-gtags-path-style: %s"
+		(symbol-name counsel-gtags-path-style))))
 	  file-candidate)))
     (file-truename file-path-per-style)))
 
@@ -659,7 +655,7 @@ its definition."
   (interactive)
   (let ((cursor-symbol (thing-at-point 'symbol t)))
     (if (and (buffer-file-name) cursor-symbol)
-        (counsel-gtags--from-here (substring-no-properties cursor-symbol))
+        (counsel-gtags--from-here cursor-symbol)
       (call-interactively 'counsel-gtags-find-definition))))
 
 (defvar counsel-gtags-command-map
