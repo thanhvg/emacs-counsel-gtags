@@ -110,10 +110,12 @@ This variable must be set before enabling the mode"
 
 (defvar counsel-gtags--last-update-time 0)
 (defvar counsel-gtags--context nil)
-(defvar counsel-gtags--context-position 0)
+(defvar counsel-gtags--other-window nil
+  "Helper global variable to implement other window functions.")
 (defvar counsel-gtags--original-default-directory nil
   "Last `default-directory' where command is invoked.")
 
+(defvar-local counsel-gtags--context-position 0)
 (defvar-local counsel-gtags--get-grep-command nil)
 
 (defconst counsel-gtags--grep-commands '("rg" "ag" "grep")
@@ -258,7 +260,9 @@ Returns (buffer line)"
 			       (or counsel-gtags--original-default-directory
 				   default-directory)))
 	   (file (counsel-gtags--resolve-actual-file-from file-path))
-	   (opened-buffer (find-file file)))
+	   (opened-buffer (if counsel-gtags--other-window
+			      (find-file-other-window file)
+			    (find-file file))))
       ;; position correctly within the file
       (goto-char (point-min))
       (forward-line (1- line))
@@ -294,6 +298,8 @@ See `counsel-gtags--async-tag-query' for more info."
 		       (swiper--cleanup))
 	     :dynamic-collection t
 	     :caller 'counsel-gtags--read-tag))
+
+;; (counsel-gtags--read-tag definition)
 
 (defun counsel-gtags--process-lines (command args)
   "Like `process-lines' on COMMAND and ARGS, but using `process-file'.
@@ -367,6 +373,16 @@ Prompt for TAGNAME if not given."
   (interactive
    (list (counsel-gtags--read-tag definition)))
   (counsel-gtags--select-file 'definition tagname))
+
+;;;###autoload
+(defun counsel-gtags-find-definition-other-window (tagname)
+  "Search for TAGNAME definition in tag database.
+Prompt for TAGNAME if not given."
+  (interactive
+   (list (counsel-gtags--read-tag definition)))
+  (let ((counsel-gtags--other-window t))
+    (counsel-gtags--select-file 'definition tagname)))
+
 
 ;;;###autoload
 (defun counsel-gtags-find-reference (tagname)
@@ -615,6 +631,7 @@ its definition."
     (define-key map (kbd "r") #'counsel-gtags-find-reference)
     (define-key map (kbd "s") #'counsel-gtags-find-symbol)
     (define-key map (kbd "f") #'counsel-gtags-find-file)
+    (define-key map (kbd "4 d") #'counsel-gtags-find-definition-other-window)
     map))
 
 (defvar counsel-gtags-mode-map (make-sparse-keymap)
