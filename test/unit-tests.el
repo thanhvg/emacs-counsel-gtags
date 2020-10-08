@@ -30,7 +30,8 @@
 ;;; Code:
 
 ;; See https://emacs.stackexchange.com/a/19458/10785
-(eval-when-compile (require 'cl))
+
+(require 'cl-lib)
 (require 'f)
 (require 'dash)
 (require 's)
@@ -135,7 +136,7 @@ int main{
 					    (and buffer-file-name
 						 (file-name-directory buffer-file-name)))))
 				  (buffer-list)))
-		(buffers-from-project (remove-if-not
+		(buffers-from-project (cl-remove-if-not
 				       (lambda (buffer-&-path)
 					 (and (stringp (cadr buffer-&-path))
 					      (string-equal (cadr buffer-&-path)
