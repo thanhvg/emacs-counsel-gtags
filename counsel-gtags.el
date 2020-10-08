@@ -565,30 +565,21 @@ Prompt for ROOTDIR and LABEL if not given.  This command is asynchronous."
     ;; On Windows, "gtags d:/tmp" work, but "gtags d:/tmp/" doesn't
     (directory-file-name (expand-file-name dir))))
 
-(defsubst counsel-gtags--how-to-update-tags ()
-  "Read prefix input from user and return corresponding type of tag update."
-  (cl-case (prefix-numeric-value current-prefix-arg)
-    (4 'entire-update)
-    (16 'generate-other-directory)
-    (otherwise 'single-update)))
-
 (defun counsel-gtags--update-tags-command (how-to)
   "Build global command line to update commands.
-HOW-TO ∈ '(entire-update generate-other-directory single-update) per
-`counsel-gtags--how-to-update-tags' (user prefix)."
-  ;; note: mayble use `-flatten' here
+HOW-TO ∈ '(entire-update generate-other-directory single-update)
+per (user prefix)."
   (cl-case how-to
     (entire-update
-     (append '("global" "-u")
-	     counsel-gtags-global-extra-update-options-list))
+     (concat "global -u " counsel-gtags-global-extra-update-options-list))
     (generate-other-directory
-     (append '("gtags")
+     (concat "gtags "
 	     counsel-gtags-global-extra-update-options-list
-	     (list (counsel-gtags--read-tag-directory))))
+	     counsel-gtags--read-tag-directory))
     (single-update
-     (append '("global" "--single-update")
+     (concat "global --single-update "
 	     counsel-gtags-global-extra-update-options-list
-	     (list (counsel-gtags--remote-truename))))))
+	     counsel-gtags--remote-truename))))
 
 (defun counsel-gtags--update-tags-p (how-to interactive-p current-time)
   "Should we update tags now?.
@@ -610,14 +601,19 @@ Changes in other files are ignored.  With a prefix argument, update
 tags for all files.  With two prefix arguments, generate new tag
 database in prompted directory."
   (interactive)
-  (let ((how-to (counsel-gtags--how-to-update-tags))
+  (let ((how-to (cl-case (prefix-numeric-value current-prefix-arg)
+		  (4 'entire-update)
+		  (16 'generate-other-directory)
+		  (otherwise 'single-update)))
         (interactive-p (called-interactively-p 'interactive))
-        (current-time (float-time (current-time))))
+        (current-time (float-time (current-time)))
+	cmds proc)
     (when (counsel-gtags--update-tags-p how-to interactive-p current-time)
       (let* ((cmds (counsel-gtags--update-tags-command how-to))
-             (proc (apply #'start-file-process "counsel-gtags-update-tag" nil cmds)))
+             (proc (apply #'start-file-process "counsel-gtags-update-tag" nil
+			  (split-string cmds))))
         (if (not proc)
-            (message "Failed: %s" (mapconcat 'identity cmds " "))
+            (message "Failed: %s" cmds)
           (set-process-sentinel proc (counsel-gtags--make-gtags-sentinel 'update))
           (setq counsel-gtags--last-update-time current-time))))))
 
