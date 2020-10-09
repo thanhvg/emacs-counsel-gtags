@@ -45,7 +45,7 @@
   "Whether to ignore case in search pattern."
   :type 'boolean)
 
-(defconst counsel-gtags-path-style-alist '(through relative absolute abslib))
+(defconst counsel-gtags-path-styles-list '(through relative absolute abslib))
 
 (defcustom counsel-gtags-path-style 'through
   "Path style of candidates.
@@ -147,7 +147,7 @@ precedence over default \"--result=grep\"."
 		   (and (getenv "GTAGSLIBPATH") "-T ")
 		   (and current-prefix-arg "-l ")
 		   (and counsel-gtags-ignore-case "-i ")
-		   (and (memq counsel-gtags-path-style counsel-gtags-path-style-alist)
+		   (and (memq counsel-gtags-path-style counsel-gtags-path-styles-list)
 			(format "--path-style=%s " (symbol-name counsel-gtags-path-style)))
 		   (assoc-default type counsel-gtags--complete-options) " "
 		   (unless (string-match-p "--result=" extra)
@@ -451,7 +451,7 @@ Useful for jumping from a location when using global commands (like with
 			 (error "Abort generating tag files")))))))
 
 (defsubst counsel-gtags--find-file-collection()
-  "Candidated for counsel-gtags-find-file."
+  "Candidates for counsel-gtags-find-file."
   (counsel-gtags--collect-candidates
    'file nil buffer-file-coding-system "--result=path "))
 
