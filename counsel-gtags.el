@@ -305,7 +305,6 @@ See `counsel-gtags--async-tag-query' for more info."
 	     :dynamic-collection t
 	     :caller 'counsel-gtags--read-tag))
 
-;; (counsel-gtags--read-tag definition)
 
 (defun counsel-gtags--process-lines (command args)
   "Like `process-lines' on COMMAND and ARGS, but using `process-file'.
@@ -313,19 +312,17 @@ See `counsel-gtags--async-tag-query' for more info."
 `process-lines' does not support Tramp because it uses `call-process'.  Using
 `process-file' makes Tramp support auto-magical."
   ;; Space before buffer name to make it "invisible"
-  (let ((global-run-buffer (get-buffer-create (format " *global @ %s*" default-directory))))
-    ;; The buffer needs to be cleared, this can be done after split-string,
-    ;; but for now it is better to keep it like this for debugging purposed
-    ;; between calls
-    (with-current-buffer global-run-buffer
-      (erase-buffer)
-      (apply #'process-file command
-	     nil    ;; no input file
-	     t      ;;Current BUFFER
-	     nil    ;;DISPLAY
-	     (split-string args))
+  (let* ((global-run-buffer (get-buffer-create (format " *global @ %s*" default-directory)))
+	 (lines (with-current-buffer global-run-buffer
+		  (erase-buffer)
+		  (apply #'process-file command
+			 nil    ;; no input file
+			 t      ;;Current BUFFER
+			 nil    ;;DISPLAY
+			 (split-string args))
 
-      (split-string (buffer-string) "\n" t))))
+		  (split-string (buffer-string) "\n" t))))
+    lines))
 
 (defun counsel-gtags--collect-candidates (type tagname encoding extra-options)
   "Collect lines for ⎡global …⎦ using TAGNAME as query.
