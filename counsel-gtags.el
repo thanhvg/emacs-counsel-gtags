@@ -87,12 +87,6 @@ searching for a tag."
   "List of extra arguments passed to gtags when updating database."
   :type 'list)
 
-(defcustom counsel-gtags-prefix-key (kbd "C-c g")
-  "Key binding used for `counsel-gtags-mode-map'.
-This variable does not have any effect unless
-`counsel-gtags-use-suggested-key-map' is non-nil."
-  :type 'string)
-
 (defcustom counsel-gtags-use-suggested-key-map t
   "Whether to use the suggested key bindings.
 This variable must be set before enabling the mode"
@@ -685,19 +679,18 @@ its definition."
     (define-key map (kbd "4 r") #'counsel-gtags-find-reference-other-window)
     (define-key map (kbd "4 s") #'counsel-gtags-find-symbol-other-window)
     (define-key map (kbd "4 f") #'counsel-gtags-find-file-other-window)
-    map))
+    map)
+  "Keymap for counsel-gtags commands after prefix.")
 
-(defvar counsel-gtags-mode-map (make-sparse-keymap)
+(defvar counsel-gtags-mode-map
   (let ((map (make-sparse-keymap)))
     (when counsel-gtags-use-suggested-key-map
-      (when counsel-gtags-prefix-key
-	(define-key map counsel-gtags-prefix-key 'counsel-gtags-command-map))
       (when counsel-gtags-simule-xref
 	(define-key map [remap xref-pop-marker-stack] #'counsel-gtags-go-backward)
 	(define-key map [remap xref-find-definitions] #'counsel-gtags-dwim)
-	(define-key map [remap xref-find-references] #'counsel-gtags--references-dwim)
-	))
-    map))
+	(define-key map [remap xref-find-references] #'counsel-gtags--references-dwim)))
+    map)
+  "Keymap for  counsel-gtags-mode.")
 
 ;;;###autoload
 (define-minor-mode counsel-gtags-mode ()
