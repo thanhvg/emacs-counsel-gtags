@@ -346,7 +346,7 @@ tested with a call to `shell-command-to-string' and `split-string' like
    (save-window-excursion
      (let ((default-directory (counsel-gtags--default-directory)))
        (cl-multiple-value-bind (the-buffer  the-line)
-	   (counsel-gtags--jump-to "./main.c:11:void another_global_fun(){" nil nil)
+	   (counsel-gtags--jump-to "./main.c:11:void another_global_fun(){" nil)
 	 (should (string-equal
 		  (file-name-nondirectory (buffer-file-name the-buffer))
 		  "main.c"))
@@ -376,7 +376,7 @@ tested with a call to `shell-command-to-string' and `split-string' like
 		   (should
 		    (= (length collection) 1))
 		   (cl-multiple-value-bind (the-buffer the-line)
-		       (counsel-gtags--jump-to (car collection) nil nil)
+		       (counsel-gtags--jump-to (car collection) nil)
 		     (should
 		      (file-remote-p (buffer-file-name the-buffer)))))))))))))
 
