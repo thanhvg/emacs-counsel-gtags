@@ -376,16 +376,6 @@ Prompt for TAGNAME if not given."
   (counsel-gtags--select-file 'definition tagname))
 
 ;;;###autoload
-(defun counsel-gtags-find-definition-other-window (tagname)
-  "Search for TAGNAME definition in tag database.
-Prompt for TAGNAME if not given."
-  (interactive
-   (list (counsel-gtags--read-tag definition)))
-  (let ((counsel-gtags--other-window t))
-    (counsel-gtags--select-file 'definition tagname)))
-
-
-;;;###autoload
 (defun counsel-gtags-find-reference (tagname)
   "Search for TAGNAME reference in tag database.
 Prompt for TAGNAME if not given."
@@ -401,6 +391,33 @@ Prompt for TAGNAME if not given."
    (list (counsel-gtags--read-tag symbol)))
   (counsel-gtags--select-file 'symbol tagname))
 
+;; Other window Commands
+
+(defun counsel-gtags-find-definition-other-window (tagname)
+  "Search for TAGNAME definition in tag database in other window.
+Prompt for TAGNAME if not given."
+  (interactive
+   (list (counsel-gtags--read-tag definition)))
+  (let ((counsel-gtags--other-window t))
+    (counsel-gtags--select-file 'definition tagname)))
+
+;;;###autoload
+(defun counsel-gtags-find-reference-other-window (tagname)
+  "Search for TAGNAME reference in tag database in other window.
+Prompt for TAGNAME if not given."
+  (interactive
+   (list (counsel-gtags--read-tag reference)))
+  (let ((counsel-gtags--other-window t))
+    (counsel-gtags--select-file 'reference tagname)))
+
+;;;###autoload
+(defun counsel-gtags-find-symbol-other-window (tagname)
+  "Search for TAGNAME symbol in tag database in other window.
+Prompt for TAGNAME if not given."
+  (interactive
+   (list (counsel-gtags--read-tag symbol)))
+  (let ((counsel-gtags--other-window t))
+    (counsel-gtags--select-file 'symbol tagname)))
 
 (defun counsel-gtags--include-file ()
   "Get ⎡#include …⎦ from first line."
@@ -439,6 +456,12 @@ Useful for jumping from a location when using global commands (like with
 	      :initial-input initial-input
 	      :action #'counsel-gtags--find-file
 	      :caller 'counsel-gtags-find-file)))
+
+(defun counsel-gtags-find-file-other-window (&optional filename)
+  (interactive)
+  "Search/narrow for FILENAME among tagged files in other window."
+  (let ((counsel-gtags--other-window t))
+    (call-interactively #'counsel-gtags-find-file filename)))
 
 (defun counsel-gtags--goto (position)
   "Go to POSITION in context stack.
@@ -625,14 +648,17 @@ its definition."
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "g") #'counsel-gtags-dwim)
     (define-key map (kbd "d") #'counsel-gtags-find-definition)
+    (define-key map (kbd "r") #'counsel-gtags-find-reference)
+    (define-key map (kbd "s") #'counsel-gtags-find-symbol)
     (define-key map (kbd "n") #'counsel-gtags-go-forward)
     (define-key map (kbd "p") #'counsel-gtags-go-backward)
     (define-key map (kbd "c") #'counsel-gtags-create-tags)
     (define-key map (kbd "u") #'counsel-gtags-update-tags)
-    (define-key map (kbd "r") #'counsel-gtags-find-reference)
-    (define-key map (kbd "s") #'counsel-gtags-find-symbol)
     (define-key map (kbd "f") #'counsel-gtags-find-file)
     (define-key map (kbd "4 d") #'counsel-gtags-find-definition-other-window)
+    (define-key map (kbd "4 r") #'counsel-gtags-find-reference-other-window)
+    (define-key map (kbd "4 s") #'counsel-gtags-find-symbol-other-window)
+    (define-key map (kbd "4 f") #'counsel-gtags-find-file-other-window)
     map))
 
 (defvar counsel-gtags-mode-map (make-sparse-keymap)
