@@ -267,7 +267,8 @@ Returns (buffer line)"
       (goto-char (point-min))
       (forward-line (1- line))
       (back-to-indentation)
-      (if push
+      (if (and push
+	       (not counsel-gtags--other-window))
 	  (counsel-gtags--push 'to))
       `(,opened-buffer ,line))))
 
@@ -277,8 +278,8 @@ Returns (buffer line)"
 This is the `:action' callback for `ivy-read' calls."
   (with-ivy-window
     (swiper--cleanup)
-    (counsel-gtags--push 'from)
-    (counsel-gtags--jump-to candidate 'push)))
+    (counsel-gtags--push 'from))
+  (counsel-gtags--jump-to candidate 'push))
 
 (defmacro counsel-gtags--read-tag (type)
   "Prompt the user for selecting a tag using `ivy-read'.
