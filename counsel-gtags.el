@@ -63,6 +63,10 @@ The following values are supported:
   "Whether to update the tag database when a buffer is saved to file."
   :type 'boolean)
 
+(defcustom counsel-gtags-simule-xref t
+  "Whether we substitute xref commands."
+  :type 'boolean)
+
 (defcustom counsel-gtags-update-interval-second 60
   "Update tag database after this many seconds have passed.
 If nil, the tags are updated every time a buffer is saved to file."
@@ -647,6 +651,15 @@ database in prompted directory."
     (counsel-gtags--select-file 'from-here tagname from-here-opt t)))
 
 ;;;###autoload
+(defun counsel-gtags--references-dwim ()
+  "Find definition or reference of thing at point (Do What I Mean).
+If point is at a definition, find its references, otherwise, find
+its definition."
+  (interactive)
+  (let ((cursor-symbol (thing-at-point 'symbol t))
+	(ivy-auto-select-single-candidate t))
+    (call-interactively 'counsel-gtags-find-definition)))
+
 (defun counsel-gtags-dwim ()
   "Find definition or reference of thing at point (Do What I Mean).
 If point is at a definition, find its references, otherwise, find
@@ -679,9 +692,11 @@ its definition."
     (when counsel-gtags-use-suggested-key-map
       (when counsel-gtags-prefix-key
 	(define-key map counsel-gtags-prefix-key 'counsel-gtags-command-map))
-
-      (define-key map [remap xref-pop-marker-stack] #'counsel-gtags-go-backward)
-      (define-key map [remap xref-find-definitions] #'counsel-gtags-find-definition))
+      (when counsel-gtags-simule-xref
+	(define-key map [remap xref-pop-marker-stack] #'counsel-gtags-go-backward)
+	(define-key map [remap xref-find-definitions] #'counsel-gtags-find-definition)
+	(define-key map [remap xref-find-references] #'counsel-gtags-find-definition)
+	))
     map))
 
 ;;;###autoload
