@@ -274,12 +274,17 @@ Returns (buffer line)"
 
 (defun counsel-gtags--find-file (candidate)
   "Open file-at-position per CANDIDATE using `find-file'.
-
 This is the `:action' callback for `ivy-read' calls."
   (with-ivy-window
     (swiper--cleanup)
     (counsel-gtags--push 'from))
   (counsel-gtags--jump-to candidate 'push))
+
+(defun counsel-gtags--find-file-other-window (candidate)
+  "Open file-at-position per CANDIDATE using `find-file-other-window'.
+This is the alternative `:action' callback for `ivy-read' calls."
+  (let ((counsel-gtags--other-window t))
+    (counsel-gtags--find-file candidate)))
 
 (defmacro counsel-gtags--read-tag (type)
   "Prompt the user for selecting a tag using `ivy-read'.
@@ -366,6 +371,10 @@ Extra command line parameters to global are forwarded through EXTRA-OPTIONS."
 		collection
 		:action #'counsel-gtags--find-file
 		:caller 'counsel-gtags--select-file))))
+
+(ivy-set-actions
+ 'counsel-gtags--select-file
+ '(("j" counsel-gtags--find-file-other-window "other window")))
 
 ;;;###autoload
 (defun counsel-gtags-find-definition (tagname)
@@ -462,6 +471,10 @@ Useful for jumping from a location when using global commands (like with
   "Search/narrow for FILENAME among tagged files in other window."
   (let ((counsel-gtags--other-window t))
     (call-interactively #'counsel-gtags-find-file filename)))
+
+(ivy-set-actions
+ 'counsel-gtags-find-file
+ '(("j" counsel-gtags--find-file-other-window "other window")))
 
 (defun counsel-gtags--goto (position)
   "Go to POSITION in context stack.
