@@ -694,8 +694,8 @@ its definition."
 	(define-key map counsel-gtags-prefix-key 'counsel-gtags-command-map))
       (when counsel-gtags-simule-xref
 	(define-key map [remap xref-pop-marker-stack] #'counsel-gtags-go-backward)
-	(define-key map [remap xref-find-definitions] #'counsel-gtags-find-definition)
-	(define-key map [remap xref-find-references] #'counsel-gtags-find-definition)
+	(define-key map [remap xref-find-definitions] #'counsel-gtags-dwim)
+	(define-key map [remap xref-find-references] #'counsel-gtags--references-dwim)
 	))
     map))
 
