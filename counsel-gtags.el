@@ -199,6 +199,8 @@ Input for searching is QUERY.
 Since we can't look for tags by regex, we look for their definition and filter
 the location, giving us a list of tags with no locations."
   (let ((command (counsel-gtags--build-command-to-collect-candidates query)))
+    (let ((inhibit-message t))
+      (message "Command: %s" command))
     (counsel--async-command command)))
 
 (defun counsel-gtags--async-tag-query (query)
@@ -537,15 +539,17 @@ Return t on success, nil otherwise."
     (push new-context counsel-gtags--context)
     (setq counsel-gtags--context-position 0)))
 
-(defun counsel-gtags--make-gtags-sentinel (action)
+(defmacro counsel-gtags--make-gtags-sentinel (action)
   "Return default sentinel that messages success/failed exit.
 
   Message printed has ACTION as detail."
-  (lambda (process _event)
-    (when (eq (process-status process) 'exit)
-      (if (zerop (process-exit-status process))
-          (message "Success: %s TAGS" action)
-        (message "Failed: %s TAGS(%d)" action (process-exit-status process))))))
+  `(lambda (process _event)
+     (when (eq (process-status process) 'exit)
+       (if (zerop (process-exit-status process))
+	   (progn
+             (message "Success: %s TAGS" ,action)
+	     (setq counsel-gtags--last-update-time current-time))
+         (message "Failed: %s TAGS(%d)" ,action (process-exit-status process))))))
 
 ;;;###autoload
 (defun counsel-gtags-create-tags (rootdir label)
@@ -555,14 +559,11 @@ Prompt for ROOTDIR and LABEL if not given.  This command is asynchronous."
   (interactive
    (list (read-directory-name "Root Directory: " nil nil t)
          (ivy-read "GTAGSLABEL: " counsel-gtags--labels)))
-  (let* ((default-directory rootdir)
-         (proc-buf (get-buffer-create " *counsel-gtags-tag-create*"))
-         (proc (start-file-process
-                "counsel-gtags-tag-create" proc-buf
-                "gtags" "-q" (concat "--gtagslabel=" label))))
-    (set-process-sentinel
-     proc
-     (counsel-gtags--make-gtags-sentinel 'create))))
+  (let ((default-directory rootdir))
+    (counsel--async-command-1 (concat "gtags -q --gtagslabel=" label)
+			      (counsel-gtags--make-gtags-sentinel 'create)
+			      #'internal-default-process-filter
+			      " *counsel-gtags-tag-create*")))
 
 (defun counsel-gtags--remote-truename (&optional file-path)
   "Return real file name for file path FILE-PATH in remote machine.
@@ -613,6 +614,7 @@ per (user prefix)."
                (>= (- current-time counsel-gtags--last-update-time)
                    counsel-gtags-update-interval-second)))))
 
+
 ;;;###autoload
 (defun counsel-gtags-update-tags ()
   "Update tag database for current file.
@@ -625,16 +627,12 @@ database in prompted directory."
 		  (16 'generate-other-directory)
 		  (otherwise 'single-update)))
         (interactive-p (called-interactively-p 'interactive))
-        (current-time (float-time (current-time)))
-	cmds proc)
+        (current-time (float-time (current-time))))
     (when (counsel-gtags--update-tags-p how-to interactive-p current-time)
-      (let* ((cmds (counsel-gtags--update-tags-command how-to))
-             (proc (apply #'start-file-process "counsel-gtags-update-tag" nil
-			  (split-string cmds))))
-        (if (not proc)
-            (message "Failed: %s" cmds)
-          (set-process-sentinel proc (counsel-gtags--make-gtags-sentinel 'update))
-          (setq counsel-gtags--last-update-time current-time))))))
+      (counsel--async-command-1 (counsel-gtags--update-tags-command how-to)
+				(counsel-gtags--make-gtags-sentinel 'update)
+				#'internal-default-process-filter
+				" *counsel-gtags-update-tag*"))))
 
 (defun counsel-gtags--from-here (tagname)
   "Try to open file by querying TAGNAME and \"--from-here\"."
@@ -652,7 +650,9 @@ its definition."
   (interactive)
   (let ((cursor-symbol (thing-at-point 'symbol t))
 	(ivy-auto-select-single-candidate t))
-    (call-interactively 'counsel-gtags-find-definition)))
+    (if (and (buffer-file-name) cursor-symbol)
+        (counsel-gtags--from-here cursor-symbol)
+      (call-interactively 'counsel-gtags-find-reference))))
 
 (defun counsel-gtags-dwim ()
   "Find definition or reference of thing at point (Do What I Mean).
