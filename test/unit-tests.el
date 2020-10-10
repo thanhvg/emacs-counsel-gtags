@@ -188,7 +188,7 @@ int main{
           (encoding buffer-file-coding-system)
 	  (extra-options)
 	  (expected '("./main.c:11:void another_global_fun(){"))
-	  (collected (counsel-gtags--collect-candidates type tagname encoding extra-options)))
+	  (collected (counsel-gtags--collect-candidates type tagname extra-options)))
      (should
       (equal collected expected)))))
 
@@ -241,8 +241,7 @@ All file candidates"
          (encoding (or buffer-file-coding-system
 		       "utf-8-unix")))
     (should encoding)
-    (let* ((candidates (counsel-gtags--collect-candidates
-		      'file nil buffer-file-coding-system "--result=path "))
+    (let* ((candidates (counsel-gtags--collect-candidates 'file nil "--result=path "))
 	   (actual-path-per-candidate (--map (counsel-gtags--resolve-actual-file-from it)
 					     candidates))
 	   (each-candidate-exist (-map #'file-exists-p actual-path-per-candidate)))
@@ -274,7 +273,7 @@ ORIGINAL-FUN is `find-file'; rest of arguments (ARGS) is the file."
 			   "find . -name '*.c' -or -name '*.h'")
 			  "\n" t)))
       (let ((candidates
-	     (counsel-gtags--find-file-collection)))
+	     (counsel-gtags--collect-candidates 'file nil "--result=path ")))
 	(should (equal
 		 candidates
 		 (-sort #'s-less? expected)))))))
@@ -334,7 +333,6 @@ tested with a call to `shell-command-to-string' and `split-string' like
 		      (collected
 		       (counsel-gtags--collect-candidates type
 							  tagname
-							  encoding
 							  extra-options)))
 		 (should (equal collected expected))))))
        ;; restore previous dir
@@ -371,7 +369,7 @@ tested with a call to `shell-command-to-string' and `split-string' like
 			(tagname "another_global_fun")
 			(extra-options)
 			(auto-select-single-candidate t)
-			(collection (counsel-gtags--select-file-collection
+			(collection (counsel-gtags--collect-candidates
 				      type tagname extra-options)))
 		   (should
 		    (= (length collection) 1))

@@ -317,12 +317,12 @@ See `counsel-gtags--async-tag-query' for more info."
 	 (lines (progn
 		  (with-current-buffer global-run-buffer
 		    (erase-buffer))
-		  (process-file-shell-command command nil t nil)
+		  (process-file-shell-command command nil global-run-buffer nil)
 		  (with-current-buffer global-run-buffer
 		    (split-string (buffer-string) "\n" t)))))
     lines))
 
-(defun counsel-gtags--collect-candidates (type tagname encoding extra-options)
+(defun counsel-gtags--collect-candidates (type tagname extra-options)
   "Collect lines for ⎡global …⎦ using TAGNAME as query.
 
 TAGNAME may be nil, suggesting a match-any query.
@@ -331,22 +331,16 @@ Use ENCODING to specify encoding.
 Use EXTRA-OPTIONS to specify encoding.
 
 This is for internal use and not for final user."
-  (let* ((options (counsel-gtags--command-options type extra-options))
+  (let* ((query-quoted (and tagname
+			    (stringp tagname)
+			    (shell-quote-argument tagname)))
+	 (options (counsel-gtags--command-options type extra-options))
          (default-directory default-directory)
-         (coding-system-for-read encoding)
-         (coding-system-for-write encoding)
-	 (query-as-list (pcase tagname
-			  ((pred null) '())
-			  ("" '())
-			  (`definition '())
-			  (_ (shell-quote-argument tagname))))
-	 (global-args (concat options query-as-list)))
-    (counsel-gtags--process-lines "global" global-args)))
+         (coding-system-for-read buffer-file-coding-system)
+         (coding-system-for-write buffer-file-coding-system))
 
-(defsubst counsel-gtags--select-file-collection (type tagname extra-options)
-  "Candidated collection for counsel-gtags--select-file."
-  (counsel-gtags--collect-candidates
-   type tagname buffer-file-coding-system extra-options))
+    (counsel-gtags--process-lines "global" (concat options query-quoted))))
+
 
 (defun counsel-gtags--select-file (type tagname
 					&optional extra-options auto-select-only-candidate)
@@ -357,7 +351,7 @@ Use TAGNAME for global query.
 Use AUTO-SELECT-ONLY-CANDIDATE to skip `ivy-read' if have a single candidate.
 Extra command line parameters to global are forwarded through EXTRA-OPTIONS."
   (let* ((default-directory (counsel-gtags--default-directory))
-	 (collection (counsel-gtags--select-file-collection type tagname extra-options))
+	 (collection (counsel-gtags--collect-candidates type tagname extra-options))
 	 (ivy-auto-select-single-candidate t)
 	 (first (cadr collection)))
     (if (and auto-select-only-candidate (= (length collection) 1))
@@ -445,17 +439,12 @@ Useful for jumping from a location when using global commands (like with
 			   (interactive-call counsel-gtags-create-tags)
 			 (error "Abort generating tag files")))))))
 
-(defsubst counsel-gtags--find-file-collection()
-  "Candidates for counsel-gtags-find-file."
-  (counsel-gtags--collect-candidates
-   'file nil buffer-file-coding-system "--result=path "))
-
 ;;;###autoload
 (defun counsel-gtags-find-file (&optional filename)
   "Search/narrow for FILENAME among tagged files."
   (interactive)
   (let* ((initial-input (or filename (counsel-gtags--include-file)))
-         (collection (counsel-gtags--find-file-collection)))
+         (collection (counsel-gtags--collect-candidates 'file nil "--result=path ")))
     (ivy-read "Find File: " collection
 	      :initial-input initial-input
 	      :action #'counsel-gtags--find-file
