@@ -218,17 +218,6 @@ ivy's default filter `counsel--async-filter' is too slow with lots of tags."
    " "
    (shell-quote-argument (counsel--elisp-to-pcre (ivy--regex query)))))
 
-(defun counsel-gtags--async-tag-query-process (query)
-  "Add filter to tag query command.
-
-Input for searching is QUERY.
-
-Since we can't look for tags by regex, we look for their definition and filter
-the location, giving us a list of tags with no locations."
-  (let ((command (counsel-gtags--build-command-to-collect-candidates query)))
-    (counsel-gtags--debug-message "Command: %s" command)
-    (counsel--async-command command)))
-
 (defun counsel-gtags--async-tag-query (query)
   "Gather the object names asynchronously for `ivy-read'.
 
@@ -241,8 +230,9 @@ tags matching QUERY, but filter the list.
 
 Inspired on ivy.org's `counsel-locate-function'."
   (or (ivy-more-chars)
-      (progn
-	(counsel-gtags--async-tag-query-process query)
+      (let ((command (counsel-gtags--build-command-to-collect-candidates query)))
+	(counsel-gtags--debug-message "Command: %s" command)
+	(counsel--async-command command)
 	'("" "Filtering …"))))
 
 (defun counsel-gtags--file-and-line (candidate)
@@ -340,14 +330,13 @@ See `counsel-gtags--async-tag-query' for more info."
   ;; Space before buffer name to make it "invisible"
   (let* ((global-run-buffer (get-buffer-create (format " *global @ %s*" default-directory)))
 	 (command (concat command " " args))
-	 (counsel-gtags--build-command-to-collect-candidates
-	  "process-lines command: %s" command)
 	 (lines (progn
 		  (with-current-buffer global-run-buffer
 		    (erase-buffer))
 		  (process-file-shell-command command nil global-run-buffer nil)
 		  (with-current-buffer global-run-buffer
 		    (split-string (buffer-string) "\n" t)))))
+    (counsel-gtags--debug-message "process-lines command: %s" command)
     lines))
 
 (defun counsel-gtags--collect-candidates (type tagname extra-options)
