@@ -92,14 +92,14 @@ searching for a tag."
 This variable must be set before enabling the mode"
   :type 'boolean)
 
-(defconst counsel-gtags--prompts
+(defconst counsel-gtags--prompts-alist
   '((definition . "Find Definition: ")
     (file      . " Find File: ")
     (pattern    . "Find Pattern: ")
     (reference  . "Find Reference: ")
     (symbol     . "Find Symbol: ")))
 
-(defconst counsel-gtags--complete-options
+(defconst counsel-gtags--complete-options-alist
   '((definition . "-d")
     (file      . "-P")
     (pattern   . "-g")
@@ -116,14 +116,14 @@ This variable must be set before enabling the mode"
 (defvar-local counsel-gtags--context-position 0)
 (defvar-local counsel-gtags--get-grep-command nil)
 
-(defconst counsel-gtags--grep-commands '("rg" "ag" "grep")
+(defconst counsel-gtags--grep-commands-list '("rg" "ag" "grep")
   "List of grep-like commands to filter candidates.
 The first command available is used to do the filtering.  `grep-command', if
 non-nil and available, has a higher priority than any entries in this list.
 Use `counsel-gtags--grep-options' to specify the options
 to suppress colored output.")
 
-(defconst counsel-gtags--grep-options
+(defconst counsel-gtags--grep-options-alist
   '(("rg" . "--color never")
     ("ag" . "--nocolor")
     ("grep" . "--color=never"))
@@ -149,7 +149,7 @@ precedence over default \"--result=grep\"."
 		   (and counsel-gtags-ignore-case "-i ")
 		   (and (memq counsel-gtags-path-style counsel-gtags-path-styles-list)
 			(format "--path-style=%s " (symbol-name counsel-gtags-path-style)))
-		   (assoc-default type counsel-gtags--complete-options) " "
+		   (assoc-default type counsel-gtags--complete-options-alist) " "
 		   (unless (string-match-p "--result=" extra)
 		     "--result=grep ")
 		   extra)))
@@ -161,7 +161,7 @@ precedence over default \"--result=grep\"."
 Returns a command without arguments.
 Otherwise, returns nil if couldn't find any.
 
-Use `counsel-gtags--grep-commands' to specify a list of commands to be
+Use `counsel-gtags--grep-commands-list' to specify a list of commands to be
 checked for availability."
   (or counsel-gtags--get-grep-command        ;; Search only the first time
       (setq counsel-gtags--get-grep-command
@@ -171,8 +171,8 @@ checked for availability."
 			(when path
 			  (throw 'path
 				 (concat path " "
-					 (cdr (assoc-string exec counsel-gtags--grep-options)))))))
-		    counsel-gtags--grep-commands)
+					 (cdr (assoc-string exec counsel-gtags--grep-options-alist)))))))
+		    counsel-gtags--grep-commands-list)
 	      nil))))
 
 (defun counsel-gtags--build-command-to-collect-candidates (query)
@@ -295,7 +295,7 @@ If `counsel-gtags-use-input-at-point' is non-nil, will use symbol at point as
 initial input for `ivy-read'.
 
 See `counsel-gtags--async-tag-query' for more info."
-  `(ivy-read ,(alist-get type counsel-gtags--prompts)
+  `(ivy-read ,(alist-get type counsel-gtags--prompts-alist)
 	     #'counsel-gtags--async-tag-query
 	     :initial-input (and counsel-gtags-use-input-at-point
 				 (ivy-thing-at-point))
