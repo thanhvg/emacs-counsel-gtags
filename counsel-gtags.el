@@ -111,6 +111,7 @@ This variable must be set before enabling the mode"
 (defvar counsel-gtags--context nil)
 (defvar counsel-gtags--other-window nil
   "Helper global variable to implement other-window functions.
+
 This variable is supposed to be used only as a forward
 declaration.  It's global value must be always null and set it
 with `let' otherwise.  When `non-nil' `counsel-gtags--jump-to'
@@ -119,10 +120,16 @@ uses `find-file-other-window' instead of `find-file.'")
   "Last `default-directory' where command is invoked.")
 
 (defvar-local counsel-gtags--context-position 0)
-(defvar-local counsel-gtags--get-grep-command nil)
+(defvar-local counsel-gtags--get-grep-command nil
+  "Grep command to use found in the system.
+
+This is cached to avoid repeat search in the system and improve
+performance.  The value is initialized in
+counsel-gtags--get-grep-command-find.")
 
 (defconst counsel-gtags--grep-commands-list '("rg" "ag" "grep")
   "List of grep-like commands to filter candidates.
+
 The first command available is used to do the filtering.  `grep-command', if
 non-nil and available, has a higher priority than any entries in this list.
 Use `counsel-gtags--grep-options' to specify the options
@@ -169,16 +176,16 @@ Otherwise, returns nil if couldn't find any.
 Use `counsel-gtags--grep-commands-list' to specify a list of commands to be
 checked for availability."
   (or counsel-gtags--get-grep-command        ;; Search only the first time
-      (setq counsel-gtags--get-grep-command
-	    (catch 'path
-	      (mapc (lambda (exec)
-		      (let ((path (executable-find exec)))
-			(when path
-			  (throw 'path
-				 (concat path " "
-					 (cdr (assoc-string exec counsel-gtags--grep-options-alist)))))))
-		    counsel-gtags--grep-commands-list)
-	      nil))))
+      (setq-local counsel-gtags--get-grep-command
+		  (catch 'path
+		    (mapc (lambda (exec)
+			    (let ((path (executable-find exec)))
+			      (when path
+				(throw 'path
+				       (concat path " "
+					       (cdr (assoc-string exec counsel-gtags--grep-options-alist)))))))
+			  counsel-gtags--grep-commands-list)
+		    nil))))
 
 (defun counsel-gtags--build-command-to-collect-candidates (query)
   "Build command to collect condidates filtering by QUERY.
@@ -241,7 +248,7 @@ global. Line number is returned as number (and not string)."
   "Resolve actual file path from CANDIDATE taken from a global cmd query.
 
 Note: candidates are handled as ⎡file:location⎦ and ⎡(file . location)⎦.
-     FILE-CANDIDATE is supposed to be *only* the file part of a candidate."
+FILE-CANDIDATE is supposed to be *only* the file part of a candidate."
   (let ((file-path-per-style
 	 (concat
 	  (pcase counsel-gtags-path-style
