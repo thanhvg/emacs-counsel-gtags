@@ -110,7 +110,11 @@ This variable must be set before enabling the mode"
 (defvar counsel-gtags--last-update-time 0)
 (defvar counsel-gtags--context nil)
 (defvar counsel-gtags--other-window nil
-  "Helper global variable to implement other window functions.")
+  "Helper global variable to implement other-window functions.
+This variable is supposed to be used only as a forward
+declaration.  It's global value must be always null and set it
+with `let' otherwise.  When `non-nil' `counsel-gtags--jump-to'
+uses `find-file-other-window' instead of `find-file.'")
 (defvar counsel-gtags--original-default-directory nil
   "Last `default-directory' where command is invoked.")
 
