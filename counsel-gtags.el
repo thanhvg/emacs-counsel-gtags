@@ -93,6 +93,11 @@ searching for a tag."
 This variable must be set before enabling the mode"
   :type 'boolean)
 
+(defcustom counsel-gtags-debug-mode nil
+  "Enable debug mode like print some commands in *Messages*.
+The general user shouldn't use this variable."
+  :type 'boolean)
+
 (defconst counsel-gtags--prompts-alist
   '((definition . "Find Definition: ")
     (file      . " Find File: ")
@@ -107,10 +112,6 @@ This variable must be set before enabling the mode"
     (reference . "-r")
     (symbol    . "-s")))
 
-(defcustom counsel-gtags-debug-mode nil
-  "Enable debug mode like print some commands in *Messages*.
-The general user shouldn't use this variable."
-  :type 'boolean)
 
 (defvar counsel-gtags--last-update-time 0)
 (defvar counsel-gtags--context nil)
