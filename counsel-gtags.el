@@ -161,7 +161,7 @@ The arguments FORMAT-STRING and ARGS are the same than in the
 `message' function."
   (if counsel-gtags-debug-mode
       (let ((inhibit-message t))
-	(apply #'message command))))
+	(apply #'message format-string args))))
 
 (defun counsel-gtags--command-options (type extra-options)
   "Get list with options for global command according to TYPE.
@@ -195,7 +195,7 @@ checked for availability."
       (setq-local counsel-gtags--get-grep-command
 		  (catch 'path
 		    (mapc (lambda (exec)
-			    (let ((path (executable-find exec)))
+			    (let ((path (executable-find exec t)))
 			      (when path
 				(throw 'path
 				       (concat path " "
