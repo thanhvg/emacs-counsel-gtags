@@ -107,6 +107,11 @@ This variable must be set before enabling the mode"
     (reference . "-r")
     (symbol    . "-s")))
 
+(defcustom counsel-gtags-debug-mode nil
+  "Enable debug mode like print some commands in *Messages*.
+The general user shouldn't use this variable."
+  :type 'boolean)
+
 (defvar counsel-gtags--last-update-time 0)
 (defvar counsel-gtags--context nil)
 (defvar counsel-gtags--other-window nil
@@ -148,6 +153,15 @@ to suppress colored output.")
 (defconst counsel-gtags--include-regexp
   "\\`\\s-*#\\(?:include\\|import\\)\\s-*[\"<]\\(?:[./]*\\)?\\(.*?\\)[\">]")
 
+(defsubst counsel-gtags--debug-message (format-string &rest args)
+  "Print messages only when `counsel-gtags-debug-mode' is `non-nil'.
+
+The arguments FORMAT-STRING and ARGS are the same than in the
+`message' function."
+  (if counsel-gtags-debug-mode
+      (let ((inhibit-message t))
+	(apply #'message command))))
+
 (defun counsel-gtags--command-options (type extra-options)
   "Get list with options for global command according to TYPE.
 
@@ -165,6 +179,7 @@ precedence over default \"--result=grep\"."
 		   (unless (string-match-p "--result=" extra)
 		     "--result=grep ")
 		   extra)))
+    (counsel-gtags--debug-message "Options: %s" options)
     options))
 
 (defun counsel-gtags--get-grep-command-find ()
@@ -202,7 +217,6 @@ ivy's default filter `counsel--async-filter' is too slow with lots of tags."
    " "
    (shell-quote-argument (counsel--elisp-to-pcre (ivy--regex query)))))
 
-
 (defun counsel-gtags--async-tag-query-process (query)
   "Add filter to tag query command.
 
@@ -211,8 +225,7 @@ Input for searching is QUERY.
 Since we can't look for tags by regex, we look for their definition and filter
 the location, giving us a list of tags with no locations."
   (let ((command (counsel-gtags--build-command-to-collect-candidates query)))
-    (let ((inhibit-message t))
-      (message "Command: %s" command))
+    (counsel-gtags--debug-message "Command: %s" command)
     (counsel--async-command command)))
 
 (defun counsel-gtags--async-tag-query (query)
@@ -326,6 +339,8 @@ See `counsel-gtags--async-tag-query' for more info."
   ;; Space before buffer name to make it "invisible"
   (let* ((global-run-buffer (get-buffer-create (format " *global @ %s*" default-directory)))
 	 (command (concat command " " args))
+	 (counsel-gtags--build-command-to-collect-candidates
+	  "process-lines command: %s" command)
 	 (lines (progn
 		  (with-current-buffer global-run-buffer
 		    (erase-buffer))
