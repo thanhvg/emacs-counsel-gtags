@@ -313,15 +313,13 @@ See `counsel-gtags--async-tag-query' for more info."
 `process-file' makes Tramp support auto-magical."
   ;; Space before buffer name to make it "invisible"
   (let* ((global-run-buffer (get-buffer-create (format " *global @ %s*" default-directory)))
-	 (lines (with-current-buffer global-run-buffer
-		  (erase-buffer)
-		  (apply #'process-file command
-			 nil    ;; no input file
-			 t      ;;Current BUFFER
-			 nil    ;;DISPLAY
-			 (split-string args))
-
-		  (split-string (buffer-string) "\n" t))))
+	 (command (concat command " " args))
+	 (lines (progn
+		  (with-current-buffer global-run-buffer
+		    (erase-buffer))
+		  (process-file-shell-command command nil t nil)
+		  (with-current-buffer global-run-buffer
+		    (split-string (buffer-string) "\n" t)))))
     lines))
 
 (defun counsel-gtags--collect-candidates (type tagname encoding extra-options)
