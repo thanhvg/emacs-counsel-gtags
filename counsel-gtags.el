@@ -64,10 +64,6 @@ The following values are supported:
   "Whether to update the tag database when a buffer is saved to file."
   :type 'boolean)
 
-(defcustom counsel-gtags-simule-xref t
-  "Whether we substitute xref commands."
-  :type 'boolean)
-
 (defcustom counsel-gtags-update-interval-second 60
   "Update tag database after this many seconds have passed.
 If nil, the tags are updated every time a buffer is saved to file."
@@ -87,11 +83,6 @@ searching for a tag."
 (defcustom counsel-gtags-gtags-extra-update-options-list nil
   "List of extra arguments passed to gtags when updating database."
   :type 'list)
-
-(defcustom counsel-gtags-use-suggested-key-map t
-  "Whether to use the suggested key bindings.
-This variable must be set before enabling the mode"
-  :type 'boolean)
 
 (defcustom counsel-gtags-debug-mode nil
   "Enable debug mode like print some commands in *Messages*.
@@ -206,17 +197,19 @@ checked for availability."
 (defun counsel-gtags--build-command-to-collect-candidates (query)
   "Build command to collect condidates filtering by QUERY.
 
-Used in `counsel-gtags--async-tag-query'.  Call global \"list all tags\"
-\(with EXTRA-ARGS\), forward QUERY to grep command (provided by
-`counsel-gtags--get-grep-command-find') to filter.  We use grep command because using
-ivy's default filter `counsel--async-filter' is too slow with lots of tags."
+Used in `counsel-gtags--async-tag-query'.  Call global \"list all
+ tags\" forward QUERY to grep command (provided by
+ `counsel-gtags--get-grep-command-find') to filter.  We use grep
+ command because using ivy's default filter
+ `counsel--async-filter' is too slow with lots of tags."
   (concat
    "global -c "
-   (counsel-gtags--command-options 'definition "--result=ctags")
+   (counsel-gtags--command-options 'definition nil)
    " | "
    (counsel-gtags--get-grep-command-find)
    " "
    (shell-quote-argument (counsel--elisp-to-pcre (ivy--regex query)))))
+
 
 (defun counsel-gtags--async-tag-query (query)
   "Gather the object names asynchronously for `ivy-read'.
@@ -592,7 +585,7 @@ Prompt for ROOTDIR and LABEL if not given.  This command is asynchronous."
   "Build global command line to update commands.
 HOW-TO ∈ '(entire-update generate-other-directory single-update)
 per (user prefix)."
-  (cl-case how-to
+  (pcase how-to
     (entire-update
      (concat "global -u " counsel-gtags-global-extra-update-options-list))
     (generate-other-directory
@@ -624,7 +617,7 @@ Changes in other files are ignored.  With a prefix argument, update
 tags for all files.  With two prefix arguments, generate new tag
 database in prompted directory."
   (interactive)
-  (let ((how-to (cl-case (prefix-numeric-value current-prefix-arg)
+  (let ((how-to (pcase (prefix-numeric-value current-prefix-arg)
 		  (4 'entire-update)
 		  (16 'generate-other-directory)
 		  (otherwise 'single-update))))
@@ -642,18 +635,6 @@ database in prompted directory."
          (file (counsel-gtags--remote-truename))
          (from-here-opt (format "--from-here=%d:%s " line (file-relative-name file root))))
     (counsel-gtags--select-file 'from-here tagname from-here-opt t)))
-
-;;;###autoload
-(defun counsel-gtags--references-dwim ()
-  "Find definition or reference of thing at point (Do What I Mean).
-If point is at a definition, find its references, otherwise, find
-its definition."
-  (interactive)
-  (let ((cursor-symbol (thing-at-point 'symbol t))
-	(ivy-auto-select-single-candidate t))
-    (if (and (buffer-file-name) cursor-symbol)
-        (counsel-gtags--from-here cursor-symbol)
-      (call-interactively 'counsel-gtags-find-reference))))
 
 (defun counsel-gtags-dwim ()
   "Find definition or reference of thing at point (Do What I Mean).
@@ -683,14 +664,7 @@ its definition."
     map)
   "Keymap for counsel-gtags commands after prefix.")
 
-(defvar counsel-gtags-mode-map
-  (let ((map (make-sparse-keymap)))
-    (when counsel-gtags-use-suggested-key-map
-      (when counsel-gtags-simule-xref
-	(define-key map [remap xref-pop-marker-stack] #'counsel-gtags-go-backward)
-	(define-key map [remap xref-find-definitions] #'counsel-gtags-dwim)
-	(define-key map [remap xref-find-references] #'counsel-gtags--references-dwim)))
-    map)
+(defvar counsel-gtags-mode-map (make-sparse-keymap)
   "Keymap for  counsel-gtags-mode.")
 
 ;;;###autoload
@@ -698,8 +672,6 @@ its definition."
   "Minor mode of counsel-gtags.
   If `counsel-gtags-update-tags' is non-nil, the tag files are updated
   after saving buffer."
-  :init-value nil
-  :global     nil
   :keymap     counsel-gtags-mode-map
   (if counsel-gtags-mode
       (when counsel-gtags-auto-update
