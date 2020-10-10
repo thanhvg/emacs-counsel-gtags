@@ -535,19 +535,6 @@ Return t on success, nil otherwise."
 	     (setq counsel-gtags--last-update-time current-time))
          (message "Failed: %s TAGS(%d)" ,action (process-exit-status process))))))
 
-;;;###autoload
-(defun counsel-gtags-create-tags (rootdir label)
-  "Create tag database in ROOTDIR.
-LABEL is passed as the value for the environment variable GTAGSLABEL.
-Prompt for ROOTDIR and LABEL if not given.  This command is asynchronous."
-  (interactive
-   (list (read-directory-name "Root Directory: " nil nil t)
-         (ivy-read "GTAGSLABEL: " counsel-gtags--labels)))
-  (let ((default-directory rootdir))
-    (counsel--async-command-1 (concat "gtags -q --gtagslabel=" label)
-			      (counsel-gtags--make-gtags-sentinel 'create)
-			      #'internal-default-process-filter
-			      " *counsel-gtags-tag-create*")))
 
 (defun counsel-gtags--remote-truename (&optional file-path)
   "Return real file name for file path FILE-PATH in remote machine.
@@ -570,6 +557,33 @@ Prompt for ROOTDIR and LABEL if not given.  This command is asynchronous."
     ;; On Windows, "gtags d:/tmp" work, but "gtags d:/tmp/" doesn't
     (read-directory-name "Directory tag generated: " nil nil t))))
 
+(defun counsel-gtags--update-tags-p (how-to interactive-p current-time)
+  "Should we update tags now?.
+
+  Will update if being called interactively per INTERACTIVE-P.
+  If HOW-TO equals 'single-update, will update only if
+  `counsel-gtags-update-interval-second' seconds have passed up to CURRENT-TIME."
+  (or interactive-p
+      (and (eq how-to 'single-update)
+           (buffer-file-name)
+           (or (not counsel-gtags-update-interval-second)
+               (>= (- current-time counsel-gtags--last-update-time)
+                   counsel-gtags-update-interval-second)))))
+
+;;;###autoload
+(defun counsel-gtags-create-tags (rootdir label)
+  "Create tag database in ROOTDIR.
+LABEL is passed as the value for the environment variable GTAGSLABEL.
+Prompt for ROOTDIR and LABEL if not given.  This command is asynchronous."
+  (interactive
+   (list (read-directory-name "Root Directory: " nil nil t)
+         (ivy-read "GTAGSLABEL: " counsel-gtags--labels)))
+  (let ((default-directory rootdir))
+    (counsel--async-command-1 (concat "gtags -q --gtagslabel=" label)
+			      (counsel-gtags--make-gtags-sentinel 'create)
+			      #'internal-default-process-filter
+			      " *counsel-gtags-tag-create*")))
+
 (defun counsel-gtags--update-tags-command (how-to)
   "Build global command line to update commands.
 HOW-TO ∈ '(entire-update generate-other-directory single-update)
@@ -585,20 +599,6 @@ per (user prefix)."
      (concat "global --single-update "
 	     counsel-gtags-global-extra-update-options-list
 	     (counsel-gtags--remote-truename)))))
-
-(defun counsel-gtags--update-tags-p (how-to interactive-p current-time)
-  "Should we update tags now?.
-
-  Will update if being called interactively per INTERACTIVE-P.
-  If HOW-TO equals 'single-update, will update only if
-  `counsel-gtags-update-interval-second' seconds have passed up to CURRENT-TIME."
-  (or interactive-p
-      (and (eq how-to 'single-update)
-           (buffer-file-name)
-           (or (not counsel-gtags-update-interval-second)
-               (>= (- current-time counsel-gtags--last-update-time)
-                   counsel-gtags-update-interval-second)))))
-
 
 ;;;###autoload
 (defun counsel-gtags-update-tags ()
