@@ -434,7 +434,7 @@ Useful for jumping from a location when using global commands (like with
           ((relative absolute) default-directory)
           (through (or (getenv "GTAGSROOT")
 		       (locate-dominating-file default-directory "GTAGS")
-		       ;; If file doesn't exist create it
+		       ;; If file doesn't exist create it?
 		       (if (yes-or-no-p "File GTAGS not found. Run 'gtags'? ")
 			   (interactive-call counsel-gtags-create-tags)
 			 (error "Abort generating tag files")))))))
@@ -563,11 +563,12 @@ Prompt for ROOTDIR and LABEL if not given.  This command is asynchronous."
         (tramp-file-name-localname (tramp-dissect-file-name filename))
       (file-truename filename))))
 
-(defun counsel-gtags--read-tag-directory ()
+(defsubst counsel-gtags--read-tag-directory ()
   "Get directory for tag generation from user."
-  (let ((dir (read-directory-name "Directory tag generated: " nil nil t)))
+  (directory-file-name
+   (expand-file-name
     ;; On Windows, "gtags d:/tmp" work, but "gtags d:/tmp/" doesn't
-    (directory-file-name (expand-file-name dir))))
+    (read-directory-name "Directory tag generated: " nil nil t))))
 
 (defun counsel-gtags--update-tags-command (how-to)
   "Build global command line to update commands.
@@ -579,11 +580,11 @@ per (user prefix)."
     (generate-other-directory
      (concat "gtags "
 	     counsel-gtags-global-extra-update-options-list
-	     counsel-gtags--read-tag-directory))
+	     (counsel-gtags--read-tag-directory)))
     (single-update
      (concat "global --single-update "
 	     counsel-gtags-global-extra-update-options-list
-	     counsel-gtags--remote-truename))))
+	     (counsel-gtags--remote-truename)))))
 
 (defun counsel-gtags--update-tags-p (how-to interactive-p current-time)
   "Should we update tags now?.
