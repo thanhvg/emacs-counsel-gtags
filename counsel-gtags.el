@@ -4,6 +4,7 @@
 
 ;; Author: Syohei YOSHIDA <syohex@gmail.com>
 ;;         Felipe Lema <felipelema@mortemale.org>
+;;         Jimmy Aguilar Mena <spacibba@aol.com>
 ;; URL: https://github.com/FelipeLema/emacs-counsel-gtags
 ;; Version: 0.01
 ;; Package-Requires: ((emacs "25.1") (counsel "0.8.0") (seq "1.0"))
@@ -557,19 +558,6 @@ Return t on success, nil otherwise."
     ;; On Windows, "gtags d:/tmp" work, but "gtags d:/tmp/" doesn't
     (read-directory-name "Directory tag generated: " nil nil t))))
 
-(defun counsel-gtags--update-tags-p (how-to interactive-p current-time)
-  "Should we update tags now?.
-
-  Will update if being called interactively per INTERACTIVE-P.
-  If HOW-TO equals 'single-update, will update only if
-  `counsel-gtags-update-interval-second' seconds have passed up to CURRENT-TIME."
-  (or interactive-p
-      (and (eq how-to 'single-update)
-           (buffer-file-name)
-           (or (not counsel-gtags-update-interval-second)
-               (>= (- current-time counsel-gtags--last-update-time)
-                   counsel-gtags-update-interval-second)))))
-
 ;;;###autoload
 (defun counsel-gtags-create-tags (rootdir label)
   "Create tag database in ROOTDIR.
@@ -600,6 +588,19 @@ per (user prefix)."
 	     counsel-gtags-global-extra-update-options-list
 	     (counsel-gtags--remote-truename)))))
 
+(defsubst counsel-gtags--update-tags-p (how-to interactive-p)
+  "Should we update tags now?.
+
+  Will update if being called interactively per INTERACTIVE-P.
+  If HOW-TO equals 'single-update, will update only if
+  `counsel-gtags-update-interval-second' seconds have passed up to CURRENT-TIME."
+  (or interactive-p
+      (and (eq how-to 'single-update)
+           (buffer-file-name)
+           (or (not counsel-gtags-update-interval-second)
+               (>= (- (float-time (current-time)) counsel-gtags--last-update-time)
+                   counsel-gtags-update-interval-second)))))
+
 ;;;###autoload
 (defun counsel-gtags-update-tags ()
   "Update tag database for current file.
@@ -610,10 +611,9 @@ database in prompted directory."
   (let ((how-to (cl-case (prefix-numeric-value current-prefix-arg)
 		  (4 'entire-update)
 		  (16 'generate-other-directory)
-		  (otherwise 'single-update)))
-        (interactive-p (called-interactively-p 'interactive))
-        (current-time (float-time (current-time))))
-    (when (counsel-gtags--update-tags-p how-to interactive-p current-time)
+		  (otherwise 'single-update))))
+    (when (counsel-gtags--update-tags-p how-to
+					(called-interactively-p 'interactive))
       (counsel--async-command-1 (counsel-gtags--update-tags-command how-to)
 				(counsel-gtags--make-gtags-sentinel 'update)
 				#'internal-default-process-filter
