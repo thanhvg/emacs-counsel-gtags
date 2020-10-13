@@ -4,6 +4,7 @@
 
 ;; Author: Syohei YOSHIDA <syohex@gmail.com>
 ;;         Felipe Lema <felipelema@mortemale.org>
+;;         Jimmy Aguilar Mena <spacibba@aol.com>
 ;; URL: https://github.com/FelipeLema/emacs-counsel-gtags
 ;; Version: 0.01
 ;; Package-Requires: ((emacs "25.1") (counsel "0.8.0") (seq "1.0"))
@@ -45,14 +46,16 @@
   "Whether to ignore case in search pattern."
   :type 'boolean)
 
-(defcustom counsel-gtags-path-style 'root
+(defconst counsel-gtags-path-styles-list '(through relative absolute abslib))
+
+(defcustom counsel-gtags-path-style 'through
   "Path style of candidates.
 The following values are supported:
-- `root'     Show path from root of current project.
+- `through'     Show path from root of current project.
 - `relative' Show path from current directory.
 - `absolute' Show absolute path.
 - `abslib' Show absolute path for libraries (GTAGSLIBPATH) and relative path for the rest."
-  :type '(choice (const :tag "Root of the current project" root)
+  :type '(choice (const :tag "Root of the current project" through)
                  (const :tag "Relative from the current directory" relative)
                  (const :tag "Absolute path" absolute)
                  (const :tag "Absolute path for libraries (GTAGSLIBPATH) and relative path for the rest" abslib)))
@@ -81,178 +84,132 @@ searching for a tag."
   "List of extra arguments passed to gtags when updating database."
   :type 'list)
 
-(defcustom counsel-gtags-prefix-key "\C-c"
-  "Key binding used for `counsel-gtags-mode-map'.
-This variable does not have any effect unless
-`counsel-gtags-use-suggested-key-map' is non-nil."
-  :type 'string)
-
-(defvaralias 'counsel-gtags-suggested-key-mapping 'counsel-gtags-use-suggested-key-map)
-(defcustom counsel-gtags-use-suggested-key-map nil
-  "Whether to use the suggested key bindings."
+(defcustom counsel-gtags-debug-mode nil
+  "Enable debug mode like print some commands in *Messages*.
+The general user shouldn't use this variable."
   :type 'boolean)
-(make-obsolete-variable 'counsel-gtags-suggested-key-mapping 'counsel-gtags-use-suggested-key-map "0.01")
 
-(defconst counsel-gtags--prompts
+(defconst counsel-gtags--prompts-alist
   '((definition . "Find Definition: ")
-    (reference  . "Find Reference: ")
+    (file      . " Find File: ")
     (pattern    . "Find Pattern: ")
+    (reference  . "Find Reference: ")
     (symbol     . "Find Symbol: ")))
 
-(defconst counsel-gtags--complete-options
-  '((file      . "-P")
+(defconst counsel-gtags--complete-options-alist
+  '((definition . "-d")
+    (file      . "-P")
     (pattern   . "-g")
     (reference . "-r")
     (symbol    . "-s")))
 
+
 (defvar counsel-gtags--last-update-time 0)
 (defvar counsel-gtags--context nil)
-(defvar counsel-gtags--context-position 0)
+(defvar counsel-gtags--other-window nil
+  "Helper global variable to implement other-window functions.
+
+This variable is supposed to be used only as a forward
+declaration.  It's global value must be always null and set it
+with `let' otherwise.  When `non-nil' `counsel-gtags--jump-to'
+uses `find-file-other-window' instead of `find-file.'")
 (defvar counsel-gtags--original-default-directory nil
   "Last `default-directory' where command is invoked.")
 
-(defvar counsel-gtags--grep-commands '("rg" "ag" "grep")
+(defvar-local counsel-gtags--context-position 0)
+(defvar-local counsel-gtags--get-grep-command nil
+  "Grep command to use found in the system.
+
+This is cached to avoid repeat search in the system and improve
+performance.  The value is initialized in
+counsel-gtags--get-grep-command-find.")
+
+(defconst counsel-gtags--grep-commands-list '("rg" "ag" "grep")
   "List of grep-like commands to filter candidates.
+
 The first command available is used to do the filtering.  `grep-command', if
 non-nil and available, has a higher priority than any entries in this list.
-Use `counsel-gtags--grep-commands-no-color-options' to specify the options
+Use `counsel-gtags--grep-options' to specify the options
 to suppress colored output.")
 
-(defvar counsel-gtags--grep-commands-no-color-options
-  '(("ag" . "--nocolor"))
-  "List of grep-like commands with their options to suppress colored output.
-By default \"--color=never\" is used.")
+(defconst counsel-gtags--grep-options-alist
+  '(("rg" . "--color never")
+    ("ag" . "--nocolor")
+    ("grep" . "--color=never"))
+  "List of grep-like commands with their options to suppress colored output.")
 
-(defun counsel-gtags--select-gtags-label ()
-  "Get label from user to be used to generate tags."
-  (let ((labels '("default" "native" "ctags" "pygments")))
-    (ivy-read "GTAGSLABEL(Default: default): " labels)))
+(defconst counsel-gtags--labels
+  '("default" "native" "ctags" "pygments")
+  "List of valid values for gtags labels.")
 
-(defun counsel-gtags--generate-tags ()
-  "Query user for tag generation and do so if accepted."
-  (if (not (yes-or-no-p "File GTAGS not found. Run 'gtags'? "))
-      (error "Abort generating tag files")
-    (let* ((root (read-directory-name "Root Directory: "))
-           (label (counsel-gtags--select-gtags-label))
-           (default-directory root))
-      (message "gtags is generating tags....")
-      (unless (zerop (process-file "gtags" nil nil nil "-q"
-                                   (concat "--gtagslabel=" label)))
-        (error "Failed: 'gtags -q'"))
-      root)))
+(defconst counsel-gtags--include-regexp
+  "\\`\\s-*#\\(?:include\\|import\\)\\s-*[\"<]\\(?:[./]*\\)?\\(.*?\\)[\">]")
 
-(defun counsel-gtags--root ()
-  "Get gtags root by looking at env vars or looking for GTAGS.
+(defsubst counsel-gtags--debug-message (format-string &rest args)
+  "Print messages only when `counsel-gtags-debug-mode' is `non-nil'.
 
-Will trigger tags generation if not found."
-  (or (getenv "GTAGSROOT")
-      (locate-dominating-file default-directory "GTAGS")
-      (counsel-gtags--generate-tags)))
+The arguments FORMAT-STRING and ARGS are the same than in the
+`message' function."
+  (if counsel-gtags-debug-mode
+      (let ((inhibit-message t))
+	(apply #'message format-string args))))
 
-(defsubst counsel-gtags--windows-p ()
-  "Whether we're inside non-free Gates OS."
-  (memq system-type '(windows-nt ms-dos)))
-
-(defun counsel-gtags--file-path-style ()
-  "Return current `counsel-gtags-path-style' option as argument to global cmd.
-
-Kept free of whitespaces."
-  (format "--path-style=%s"
-          (pcase counsel-gtags-path-style
-            ((or 'relative 'absolute 'abslib)
-	     (symbol-name counsel-gtags-path-style))
-            ('root "through")
-            (_
-	     (error "Unexpected counsel-gtags-path-style: %s"
-	            (symbol-name counsel-gtags-path-style))))))
-
-(defun counsel-gtags--command-options (type &optional extra-options)
+(defun counsel-gtags--command-options (type extra-options)
   "Get list with options for global command according to TYPE.
 
 Prepend EXTRA-OPTIONS.  If \"--result=.\" is in EXTRA-OPTIONS, it will have
 precedence over default \"--result=grep\"."
-  (let* ((options extra-options)
-	 (has-result (seq-filter (lambda (opt)
-				   (and (stringp opt)
-					(string-prefix-p "--result=" opt)))
-				 options)))
-    (unless has-result
-      (setq options (append '("--result=grep") options)))
-    (let ((opt (assoc-default type counsel-gtags--complete-options)))
-      (when opt
-        (push opt options)))
-    (push (counsel-gtags--file-path-style) options)
-    (when counsel-gtags-ignore-case
-      (push "-i" options))
-    (when current-prefix-arg ;; XXX
-      (push "-l" options))
-    (when (getenv "GTAGSLIBPATH")
-      (push "-T" options))
+  (let* ((extra (or (and (stringp extra-options) extra-options)
+		    " "))
+	 (options (concat
+		   (and (getenv "GTAGSLIBPATH") "-T ")
+		   (and current-prefix-arg "-l ")
+		   (and counsel-gtags-ignore-case "-i ")
+		   (and (memq counsel-gtags-path-style counsel-gtags-path-styles-list)
+			(format "--path-style=%s " (symbol-name counsel-gtags-path-style)))
+		   (assoc-default type counsel-gtags--complete-options-alist) " "
+		   (unless (string-match-p "--result=" extra)
+		     "--result=grep ")
+		   extra)))
+    (counsel-gtags--debug-message "Options: %s" options)
     options))
 
-(defun counsel-gtags--string-looks-like-regex (s)
-  "Return non-nil if S has special regex characters."
-  (and s
-       (save-match-data
-	 (string-match (rx (any "." "^" "*" "+" "?" "{" "}" "[" "]"
-				"$" "(" ")"))
-		       s))))
-
-(defun counsel-gtags--get-grep-command ()
+(defun counsel-gtags--get-grep-command-find ()
   "Get a grep command to be used to filter candidates.
 
 Returns a command without arguments.
-
 Otherwise, returns nil if couldn't find any.
 
-Use `counsel-gtags--grep-commands' to specify a list of commands to be
+Use `counsel-gtags--grep-commands-list' to specify a list of commands to be
 checked for availability."
-  (cl-loop
-   for command in (cons grep-command counsel-gtags--grep-commands)
-   for actual-command = (and command
-			     (let ((command-no-args (car
-						     (split-string command))))
-			       (executable-find command-no-args)))
-   for actual-command = (and actual-command
-                             (concat
-                              actual-command " "
-                              (or (cdr (assoc
-                                        (file-name-base actual-command)
-                                        counsel-gtags--grep-commands-no-color-options))
-                                  "--color=never")))
-   while (not actual-command)
-   finally return actual-command))
+  (or counsel-gtags--get-grep-command        ;; Search only the first time
+      (setq-local counsel-gtags--get-grep-command
+		  (catch 'path
+		    (mapc (lambda (exec)
+			    (let ((path (executable-find exec t)))
+			      (when path
+				(throw 'path
+				       (concat path " "
+					       (cdr (assoc-string exec counsel-gtags--grep-options-alist)))))))
+			  counsel-gtags--grep-commands-list)
+		    nil))))
 
-(defun counsel-gtags--build-command-to-collect-candidates (query &optional extra-args)
+(defun counsel-gtags--build-command-to-collect-candidates (query)
   "Build command to collect condidates filtering by QUERY.
 
-Used in `counsel-gtags--async-tag-query'.  Call global \"list all tags\"
-\(with EXTRA-ARGS\), forward QUERY to grep command (provided by
-`counsel-gtags--get-grep-command') to filter.  We use grep command because using
-ivy's default filter `counsel--async-filter' is too slow with lots of tags."
+Used in `counsel-gtags--async-tag-query'.  Call global \"list all
+ tags\" forward QUERY to grep command (provided by
+ `counsel-gtags--get-grep-command-find') to filter.  We use grep
+ command because using ivy's default filter
+ `counsel--async-filter' is too slow with lots of tags."
   (concat
-   (mapconcat #'shell-quote-argument
-	      (append
-	       `("global" "-c")
-	       (counsel-gtags--command-options 'definition extra-args))
-	      " ")
+   "global -c "
+   (counsel-gtags--command-options 'definition nil)
    " | "
-   (counsel-gtags--get-grep-command) " "
-   (thread-last (ivy--regex query)
-     (counsel--elisp-to-pcre)
-     (shell-quote-argument))))
+   (counsel-gtags--get-grep-command-find)
+   " "
+   (shell-quote-argument (counsel--elisp-to-pcre (ivy--regex query)))))
 
-
-(defun counsel-gtags--async-tag-query-process (query)
-  "Add filter to tag query command.
-
-Input for searching is QUERY.
-
-Since we can't look for tags by regex, we look for their definition and filter
-the location, giving us a list of tags with no locations."
-  (counsel--async-command
-   (counsel-gtags--build-command-to-collect-candidates query
-						       '("--result=ctags"))))
 
 (defun counsel-gtags--async-tag-query (query)
   "Gather the object names asynchronously for `ivy-read'.
@@ -265,42 +222,39 @@ Because «global -c» only accepts letters-and-numbers, we actually search for
 tags matching QUERY, but filter the list.
 
 Inspired on ivy.org's `counsel-locate-function'."
-  (or
-   (ivy-more-chars)
-   (progn
-     (counsel-gtags--async-tag-query-process query)
-     '("" "Filtering …"))))
+  (or (ivy-more-chars)
+      (let ((command (counsel-gtags--build-command-to-collect-candidates query)))
+	(counsel-gtags--debug-message "Command: %s" command)
+	(counsel--async-command command)
+	'("" "Filtering …"))))
 
 (defun counsel-gtags--file-and-line (candidate)
   "Return list with file and position per CANDIDATE.
 
 Candidates are supposed to be strings of the form \"file:line\" as returned by
 global. Line number is returned as number (and not string)."
-  (if (and (counsel-gtags--windows-p)
+  (if (and (memq system-type '(windows-nt ms-dos))  ;; in MS windows
            (string-match-p "\\`[a-zA-Z]:" candidate)) ;; Windows Driver letter
       (when (string-match "\\`\\([^:]+:[^:]+:\\):\\([^:]+\\)" candidate)
         (list (match-string-no-properties 1)
               (string-to-number (match-string-no-properties 2))))
     (let ((fields (split-string candidate ":")))
-      (list (cl-first fields) (string-to-number (or (cl-second fields) "1"))))))
+      (list (car fields) (string-to-number (or (cadr fields) "1"))))))
 
 (defun counsel-gtags--resolve-actual-file-from (file-candidate)
   "Resolve actual file path from CANDIDATE taken from a global cmd query.
 
 Note: candidates are handled as ⎡file:location⎦ and ⎡(file . location)⎦.
-     FILE-CANDIDATE is supposed to be *only* the file part of a candidate."
+FILE-CANDIDATE is supposed to be *only* the file part of a candidate."
   (let ((file-path-per-style
 	 (concat
 	  (pcase counsel-gtags-path-style
-	    ((or 'relative 'absolute 'abslib)
-	     "")
-	    ('root
-	     (file-name-as-directory
-	      (counsel-gtags--default-directory)))
-	    (_
-	     (error
-	      "Unexpected counsel-gtags-path-style: %s"
-	      (symbol-name counsel-gtags-path-style))))
+	    ((or 'relative 'absolute 'abslib) "")
+	    ('through (file-name-as-directory
+		       (counsel-gtags--default-directory)))
+	    (_ (error
+		"Unexpected counsel-gtags-path-style: %s"
+		(symbol-name counsel-gtags-path-style))))
 	  file-candidate)))
     (file-truename file-path-per-style)))
 
@@ -315,89 +269,70 @@ Returns (buffer line)"
 			       (or counsel-gtags--original-default-directory
 				   default-directory)))
 	   (file (counsel-gtags--resolve-actual-file-from file-path))
-	   (opened-buffer (find-file file)))
+	   (opened-buffer (if counsel-gtags--other-window
+			      (find-file-other-window file)
+			    (find-file file))))
       ;; position correctly within the file
       (goto-char (point-min))
       (forward-line (1- line))
       (back-to-indentation)
-      (if push
+      (if (and push
+	       (not counsel-gtags--other-window))
 	  (counsel-gtags--push 'to))
       `(,opened-buffer ,line))))
 
 (defun counsel-gtags--find-file (candidate)
   "Open file-at-position per CANDIDATE using `find-file'.
-
 This is the `:action' callback for `ivy-read' calls."
   (with-ivy-window
     (swiper--cleanup)
-    (counsel-gtags--push 'from)
-    (counsel-gtags--jump-to candidate 'push)))
+    (counsel-gtags--push 'from))
+  (counsel-gtags--jump-to candidate 'push))
 
-(defun counsel-gtags--read-tag-ivy-parameters (type)
-  "Get `counsel-gtags--read-tag' the parameters from TYPE to call `ivy-read'."
-  `(,(assoc-default type counsel-gtags--prompts)
-    counsel-gtags--async-tag-query
-    :initial-input ,(and counsel-gtags-use-input-at-point
-			 (thing-at-point 'symbol))
-    :unwind ,(lambda ()
-	       (counsel-delete-process)
-	       (swiper--cleanup))
-    :dynamic-collection t))
+(defun counsel-gtags--find-file-other-window (candidate)
+  "Open file-at-position per CANDIDATE using `find-file-other-window'.
+This is the alternative `:action' callback for `ivy-read' calls."
+  (let ((counsel-gtags--other-window t))
+    (counsel-gtags--find-file candidate)))
 
-(defun counsel-gtags--read-tag (type)
+(defmacro counsel-gtags--read-tag (type)
   "Prompt the user for selecting a tag using `ivy-read'.
 
 Returns selected tag
-
 Use TYPE ∈ '(definition reference symbol) for defining global parameters.
 If `counsel-gtags-use-input-at-point' is non-nil, will use symbol at point as
 initial input for `ivy-read'.
 
-TYPE ∈ `counsel-gtags--prompts'
-
 See `counsel-gtags--async-tag-query' for more info."
-  (apply 'ivy-read
-	 (plist-put
-	  (counsel-gtags--read-tag-ivy-parameters type)
-	  :caller 'counsel-gtags--read-tag)))
+  `(ivy-read ,(alist-get type counsel-gtags--prompts-alist)
+	     #'counsel-gtags--async-tag-query
+	     :initial-input (and counsel-gtags-use-input-at-point
+				 (ivy-thing-at-point))
+	     :unwind (lambda ()
+		       (counsel-delete-process)
+		       (swiper--cleanup))
+	     :dynamic-collection t
+	     :caller 'counsel-gtags--read-tag))
 
 
-
-(defun counsel-gtags--tag-directory ()
-  "Get directory from either GTAGSROOT env var or by running global."
-  (with-temp-buffer
-    (or (getenv "GTAGSROOT")
-        (progn
-          (unless (zerop (process-file "global" nil t nil "-p"))
-            (error "GTAGS not found"))
-          (goto-char (point-min))
-          (let ((dir (buffer-substring-no-properties (point) (line-end-position))))
-            (file-name-as-directory (if (eq system-type 'cygwin)
-                                        (cygwin-convert-file-name-from-windows dir)
-                                      dir)))))))
-
-(defun counsel-gtags--process-lines (command &rest args)
+(defun counsel-gtags--process-lines (command args)
   "Like `process-lines' on COMMAND and ARGS, but using `process-file'.
 
 `process-lines' does not support Tramp because it uses `call-process'.  Using
 `process-file' makes Tramp support auto-magical."
   ;; Space before buffer name to make it "invisible"
-  (let ((global-run-buffer (get-buffer-create (format " *global @ %s*" default-directory))))
-    ;; The buffer needs to be cleared, this can be done after split-string,
-    ;; but for now it is better to keep it like this for debugging purposed
-    ;; between calls
-    (with-current-buffer global-run-buffer
-      (erase-buffer))
-    (apply #'process-file command
-	   nil ;; no input file
-	   global-run-buffer;;BUFFER
-	   nil ;;DISPLAY
-	   args)
-    (with-current-buffer global-run-buffer
-      (split-string
-       (buffer-string) "\n" t))))
+  (let* ((global-run-buffer (get-buffer-create (format " *global @ %s*" default-directory)))
+	 (command (concat command " " args))
+	 (lines (progn
+		  (with-current-buffer global-run-buffer
+		    (erase-buffer))
+		  (process-file-shell-command command nil global-run-buffer nil)
+		  (with-current-buffer global-run-buffer
+		    (split-string (buffer-string) "\n" t)))))
+    (counsel-gtags--debug-message "process-lines command: %s" command)
+    lines))
 
-(defun counsel-gtags--collect-candidates (type tagname encoding extra-options)
+(defun counsel-gtags--collect-candidates (type tagname extra-options)
   "Collect lines for ⎡global …⎦ using TAGNAME as query.
 
 TAGNAME may be nil, suggesting a match-any query.
@@ -406,58 +341,46 @@ Use ENCODING to specify encoding.
 Use EXTRA-OPTIONS to specify encoding.
 
 This is for internal use and not for final user."
-  (let* ((options (counsel-gtags--command-options type extra-options))
+  (let* ((query-quoted (and tagname
+			    (stringp tagname)
+			    (shell-quote-argument tagname)))
+	 (options (counsel-gtags--command-options type extra-options))
          (default-directory default-directory)
-         (coding-system-for-read encoding)
-         (coding-system-for-write encoding)
-	 (query-as-list (pcase tagname
-			  ((pred null) '())
-			  ("" '())
-			  (`definition '())
-			  (_ (list tagname))))
-	 (global-args (append (reverse options) query-as-list)))
-    (apply #'counsel-gtags--process-lines "global" global-args)))
+         (coding-system-for-read buffer-file-coding-system)
+         (coding-system-for-write buffer-file-coding-system))
 
-(defun counsel-gtags--select-file-ivy-parameters (type tagname extra-options auto-select-only-candidate)
-  "Get `counsel-gtags--select-file' the parameters from TYPE to call `ivy-read'."
-  (if (string-empty-p tagname)
-      (message "No candidate tags")
-    (let* ((root (counsel-gtags--default-directory))
-           (encoding buffer-file-coding-system)
-           (default-directory root)
-           (collection (counsel-gtags--collect-candidates
-			type tagname encoding extra-options))
-           (ivy-auto-select-single-candidate t) ;; see issue #7
-           )
-      `("Pattern: " ,collection
-        :action counsel-gtags--find-file))))
+    (counsel-gtags--process-lines "global" (concat options query-quoted))))
 
-(defun counsel-gtags--select-file (type tagname &optional extra-options auto-select-only-candidate)
+
+(defun counsel-gtags--select-file (type tagname
+					&optional extra-options auto-select-only-candidate)
   "Prompt the user to select a file_path:position according to query.
 
 Use TYPE ∈ '(definition reference symbol) for defining global parameters.
 Use TAGNAME for global query.
 Use AUTO-SELECT-ONLY-CANDIDATE to skip `ivy-read' if have a single candidate.
 Extra command line parameters to global are forwarded through EXTRA-OPTIONS."
-  (let* ((the-ivy-arguments
-	  (counsel-gtags--select-file-ivy-parameters type
-						     tagname
-						     extra-options
-						     auto-select-only-candidate))
-	 (collection (cadr the-ivy-arguments)))
+  (let* ((default-directory (counsel-gtags--default-directory))
+	 (collection (counsel-gtags--collect-candidates type tagname extra-options))
+	 (ivy-auto-select-single-candidate t)
+	 (first (cadr collection)))
     (if (and auto-select-only-candidate (= (length collection) 1))
-        (counsel-gtags--find-file (car collection))
-      ;; else
-      (apply 'ivy-read (plist-put
-			the-ivy-arguments
-			:caller 'counsel-gtags--select-file)))))
+        (counsel-gtags--find-file (car first))
+      (ivy-read "Pattern: "
+		collection
+		:action #'counsel-gtags--find-file
+		:caller 'counsel-gtags--select-file))))
+
+(ivy-set-actions
+ 'counsel-gtags--select-file
+ '(("j" counsel-gtags--find-file-other-window "other window")))
 
 ;;;###autoload
 (defun counsel-gtags-find-definition (tagname)
   "Search for TAGNAME definition in tag database.
 Prompt for TAGNAME if not given."
   (interactive
-   (list (counsel-gtags--read-tag 'definition)))
+   (list (counsel-gtags--read-tag definition)))
   (counsel-gtags--select-file 'definition tagname))
 
 ;;;###autoload
@@ -465,7 +388,7 @@ Prompt for TAGNAME if not given."
   "Search for TAGNAME reference in tag database.
 Prompt for TAGNAME if not given."
   (interactive
-   (list (counsel-gtags--read-tag 'reference)))
+   (list (counsel-gtags--read-tag reference)))
   (counsel-gtags--select-file 'reference tagname))
 
 ;;;###autoload
@@ -473,11 +396,36 @@ Prompt for TAGNAME if not given."
   "Search for TAGNAME symbol in tag database.
 Prompt for TAGNAME if not given."
   (interactive
-   (list (counsel-gtags--read-tag 'symbol)))
+   (list (counsel-gtags--read-tag symbol)))
   (counsel-gtags--select-file 'symbol tagname))
 
-(defconst counsel-gtags--include-regexp
-  "\\`\\s-*#\\(?:include\\|import\\)\\s-*[\"<]\\(?:[./]*\\)?\\(.*?\\)[\">]")
+;; Other window Commands
+
+(defun counsel-gtags-find-definition-other-window (tagname)
+  "Search for TAGNAME definition in tag database in other window.
+Prompt for TAGNAME if not given."
+  (interactive
+   (list (counsel-gtags--read-tag definition)))
+  (let ((counsel-gtags--other-window t))
+    (counsel-gtags--select-file 'definition tagname)))
+
+;;;###autoload
+(defun counsel-gtags-find-reference-other-window (tagname)
+  "Search for TAGNAME reference in tag database in other window.
+Prompt for TAGNAME if not given."
+  (interactive
+   (list (counsel-gtags--read-tag reference)))
+  (let ((counsel-gtags--other-window t))
+    (counsel-gtags--select-file 'reference tagname)))
+
+;;;###autoload
+(defun counsel-gtags-find-symbol-other-window (tagname)
+  "Search for TAGNAME symbol in tag database in other window.
+Prompt for TAGNAME if not given."
+  (interactive
+   (list (counsel-gtags--read-tag symbol)))
+  (let ((counsel-gtags--other-window t))
+    (counsel-gtags--select-file 'symbol tagname)))
 
 (defun counsel-gtags--include-file ()
   "Get ⎡#include …⎦ from first line."
@@ -493,45 +441,50 @@ Useful for jumping from a location when using global commands (like with
 \"--from-here\")."
   (setq counsel-gtags--original-default-directory
         (cl-case counsel-gtags-path-style
-          ((relative absolute abslib) default-directory)
-          (root (counsel-gtags--root)))))
-
-(defun counsel-gtags--get-files ()
-  "Get a list of all files from global."
-  (let* ((encoding buffer-file-coding-system)
-	 (candidates (counsel-gtags--collect-candidates
-		      'file
-		      nil ;; match any
-		      encoding
-		      nil))
-	 (files (mapcar (lambda (candidate)
-			  (cl-multiple-value-bind (file-path _)
-			      (counsel-gtags--file-and-line candidate)
-			    file-path))
-			candidates
-			)))
-    (cl-remove-duplicates files
-			  :test #'string-equal)))
-
-(defun counsel-gtags--find-file-ivy-parameters (filename)
-  "Get `counsel-gtags-find-file' the parameters from FILENAME to call `ivy-read'."
-
-  (let* ((initial-input (or filename
-			    (counsel-gtags--include-file)))
-         (collection (counsel-gtags--get-files)))
-    `("Find File: "
-      ,collection
-      :initial-input ,initial-input
-      :action counsel-gtags--find-file)))
+          ((relative absolute) default-directory)
+          (through (or (getenv "GTAGSROOT")
+		       (locate-dominating-file default-directory "GTAGS")
+		       ;; If file doesn't exist create it?
+		       (if (yes-or-no-p "File GTAGS not found. Run 'gtags'? ")
+			   (interactive-call counsel-gtags-create-tags)
+			 (error "Abort generating tag files")))))))
 
 ;;;###autoload
 (defun counsel-gtags-find-file (&optional filename)
   "Search/narrow for FILENAME among tagged files."
   (interactive)
-  (apply 'ivy-read
-	 (plist-put
-	  (counsel-gtags--find-file-ivy-parameters filename)
-	  :caller 'counsel-gtags-find-file-name)))
+  (let* ((initial-input (or filename (counsel-gtags--include-file)))
+         (collection (counsel-gtags--collect-candidates 'file nil "--result=path ")))
+    (ivy-read "Find File: " collection
+	      :initial-input initial-input
+	      :action #'counsel-gtags--find-file
+	      :caller 'counsel-gtags-find-file)))
+
+(defun counsel-gtags-find-file-other-window (&optional filename)
+  (interactive)
+  "Search/narrow for FILENAME among tagged files in other window."
+  (let ((counsel-gtags--other-window t))
+    (call-interactively #'counsel-gtags-find-file filename)))
+
+(ivy-set-actions
+ 'counsel-gtags-find-file
+ '(("j" counsel-gtags--find-file-other-window "other window")))
+
+(defun counsel-gtags--goto (position)
+  "Go to POSITION in context stack.
+Return t on success, nil otherwise."
+  (let ((context (nth position counsel-gtags--context)))
+    (when (and context
+               (cond
+                ((plist-get context :file)
+                 (find-file (plist-get context :file)))
+                ((and (plist-get context :buffer)
+                      (buffer-live-p (plist-get context :buffer)))
+                 (switch-to-buffer (plist-get context :buffer)))
+                (t nil)))
+      (goto-char (point-min))
+      (forward-line (1- (plist-get context :line)))
+      t)))
 
 ;;;###autoload
 (defun counsel-gtags-go-backward ()
@@ -546,8 +499,6 @@ Useful for jumping from a location when using global commands (like with
         (when (counsel-gtags--goto position)
           (setq counsel-gtags--context-position position)
           (throw 'exit t))))))
-(defalias 'counsel-gtags-pop 'counsel-gtags-go-backward)
-(make-obsolete 'counsel-gtags-pop 'counsel-gtags-go-backward "0.01")
 
 ;;;###autoload
 (defun counsel-gtags-go-forward ()
@@ -561,23 +512,6 @@ Useful for jumping from a location when using global commands (like with
         (when (counsel-gtags--goto position)
           (setq counsel-gtags--context-position position)
           (throw 'exit t))))))
-
-(defun counsel-gtags--goto (position)
-  "Go to POSITION in context stack.
-Return t on success, nil otherwise."
-  (let ((context (nth position counsel-gtags--context)))
-    (when (and context
-               (cond
-                ((plist-get context :file)
-                 (find-file (plist-get context :file)))
-                ((and (plist-get context :buffer)
-                      (buffer-live-p (plist-get context :buffer)))
-                 (switch-to-buffer (plist-get context :buffer)))
-                (t
-                 nil)))
-      (goto-char (point-min))
-      (forward-line (1- (plist-get context :line)))
-      t)))
 
 (defun counsel-gtags--push (direction)
   "Add new entry to context stack.
@@ -599,32 +533,18 @@ Return t on success, nil otherwise."
     (push new-context counsel-gtags--context)
     (setq counsel-gtags--context-position 0)))
 
-(defun counsel-gtags--make-gtags-sentinel (action)
+(defmacro counsel-gtags--make-gtags-sentinel (action)
   "Return default sentinel that messages success/failed exit.
 
   Message printed has ACTION as detail."
-  (lambda (process _event)
-    (when (eq (process-status process) 'exit)
-      (if (zerop (process-exit-status process))
-          (message "Success: %s TAGS" action)
-        (message "Failed: %s TAGS(%d)" action (process-exit-status process))))))
+  `(lambda (process _event)
+     (when (eq (process-status process) 'exit)
+       (if (zerop (process-exit-status process))
+	   (progn
+             (message "Success: %s TAGS" ,action)
+	     (setq counsel-gtags--last-update-time current-time))
+         (message "Failed: %s TAGS(%d)" ,action (process-exit-status process))))))
 
-;;;###autoload
-(defun counsel-gtags-create-tags (rootdir label)
-  "Create tag database in ROOTDIR.
-LABEL is passed as the value for the environment variable GTAGSLABEL.
-Prompt for ROOTDIR and LABEL if not given.  This command is asynchronous."
-  (interactive
-   (list (read-directory-name "Directory: " nil nil t)
-         (counsel-gtags--select-gtags-label)))
-  (let* ((default-directory rootdir)
-         (proc-buf (get-buffer-create " *counsel-gtags-tag-create*"))
-         (proc (start-file-process
-                "counsel-gtags-tag-create" proc-buf
-                "gtags" "-q" (concat "--gtagslabel=" label))))
-    (set-process-sentinel
-     proc
-     (counsel-gtags--make-gtags-sentinel 'create))))
 
 (defun counsel-gtags--remote-truename (&optional file-path)
   "Return real file name for file path FILE-PATH in remote machine.
@@ -640,38 +560,44 @@ Prompt for ROOTDIR and LABEL if not given.  This command is asynchronous."
         (tramp-file-name-localname (tramp-dissect-file-name filename))
       (file-truename filename))))
 
-(defun counsel-gtags--read-tag-directory ()
+(defsubst counsel-gtags--read-tag-directory ()
   "Get directory for tag generation from user."
-  (let ((dir (read-directory-name "Directory tag generated: " nil nil t)))
+  (directory-file-name
+   (expand-file-name
     ;; On Windows, "gtags d:/tmp" work, but "gtags d:/tmp/" doesn't
-    (directory-file-name (expand-file-name dir))))
+    (read-directory-name "Directory tag generated: " nil nil t))))
 
-(defsubst counsel-gtags--how-to-update-tags ()
-  "Read prefix input from user and return corresponding type of tag update."
-  (cl-case (prefix-numeric-value current-prefix-arg)
-    (4 'entire-update)
-    (16 'generate-other-directory)
-    (otherwise 'single-update)))
+;;;###autoload
+(defun counsel-gtags-create-tags (rootdir label)
+  "Create tag database in ROOTDIR.
+LABEL is passed as the value for the environment variable GTAGSLABEL.
+Prompt for ROOTDIR and LABEL if not given.  This command is asynchronous."
+  (interactive
+   (list (read-directory-name "Root Directory: " nil nil t)
+         (ivy-read "GTAGSLABEL: " counsel-gtags--labels)))
+  (let ((default-directory rootdir))
+    (counsel--async-command-1 (concat "gtags -q --gtagslabel=" label)
+			      (counsel-gtags--make-gtags-sentinel 'create)
+			      #'internal-default-process-filter
+			      " *counsel-gtags-tag-create*")))
 
 (defun counsel-gtags--update-tags-command (how-to)
   "Build global command line to update commands.
-HOW-TO ∈ '(entire-update generate-other-directory single-update) per
-`counsel-gtags--how-to-update-tags' (user prefix)."
-  ;; note: mayble use `-flatten' here
-  (cl-case how-to
+HOW-TO ∈ '(entire-update generate-other-directory single-update)
+per (user prefix)."
+  (pcase how-to
     (entire-update
-     (append '("global" "-u")
-	     counsel-gtags-global-extra-update-options-list))
+     (concat "global -u " counsel-gtags-global-extra-update-options-list))
     (generate-other-directory
-     (append '("gtags")
+     (concat "gtags "
 	     counsel-gtags-global-extra-update-options-list
-	     (list (counsel-gtags--read-tag-directory))))
+	     (counsel-gtags--read-tag-directory)))
     (single-update
-     (append '("global" "--single-update")
+     (concat "global --single-update "
 	     counsel-gtags-global-extra-update-options-list
-	     (list (counsel-gtags--remote-truename))))))
+	     (counsel-gtags--remote-truename)))))
 
-(defun counsel-gtags--update-tags-p (how-to interactive-p current-time)
+(defsubst counsel-gtags--update-tags-p (how-to interactive-p)
   "Should we update tags now?.
 
   Will update if being called interactively per INTERACTIVE-P.
@@ -681,7 +607,7 @@ HOW-TO ∈ '(entire-update generate-other-directory single-update) per
       (and (eq how-to 'single-update)
            (buffer-file-name)
            (or (not counsel-gtags-update-interval-second)
-               (>= (- current-time counsel-gtags--last-update-time)
+               (>= (- (float-time (current-time)) counsel-gtags--last-update-time)
                    counsel-gtags-update-interval-second)))))
 
 ;;;###autoload
@@ -691,73 +617,67 @@ Changes in other files are ignored.  With a prefix argument, update
 tags for all files.  With two prefix arguments, generate new tag
 database in prompted directory."
   (interactive)
-  (let ((how-to (counsel-gtags--how-to-update-tags))
-        (interactive-p (called-interactively-p 'interactive))
-        (current-time (float-time (current-time))))
-    (when (counsel-gtags--update-tags-p how-to interactive-p current-time)
-      (let* ((cmds (counsel-gtags--update-tags-command how-to))
-             (proc (apply #'start-file-process "counsel-gtags-update-tag" nil cmds)))
-        (if (not proc)
-            (message "Failed: %s" (mapconcat 'identity cmds " "))
-          (set-process-sentinel proc (counsel-gtags--make-gtags-sentinel 'update))
-          (setq counsel-gtags--last-update-time current-time))))))
+  (let ((how-to (pcase (prefix-numeric-value current-prefix-arg)
+		  (4 'entire-update)
+		  (16 'generate-other-directory)
+		  (otherwise 'single-update))))
+    (when (counsel-gtags--update-tags-p how-to
+					(called-interactively-p 'interactive))
+      (counsel--async-command-1 (counsel-gtags--update-tags-command how-to)
+				(counsel-gtags--make-gtags-sentinel 'update)
+				#'internal-default-process-filter
+				" *counsel-gtags-update-tag*"))))
 
 (defun counsel-gtags--from-here (tagname)
   "Try to open file by querying TAGNAME and \"--from-here\"."
   (let* ((line (line-number-at-pos))
          (root (counsel-gtags--remote-truename (counsel-gtags--default-directory)))
          (file (counsel-gtags--remote-truename))
-         (from-here-opt (format "--from-here=%d:%s" line (file-relative-name file root))))
-    (counsel-gtags--select-file 'from-here tagname (list from-here-opt) t)))
+         (from-here-opt (format "--from-here=%d:%s " line (file-relative-name file root))))
+    (counsel-gtags--select-file 'from-here tagname from-here-opt t)))
 
-;;;###autoload
 (defun counsel-gtags-dwim ()
   "Find definition or reference of thing at point (Do What I Mean).
 If point is at a definition, find its references, otherwise, find
 its definition."
   (interactive)
-  (let ((cursor-symbol (thing-at-point 'symbol)))
+  (let ((cursor-symbol (thing-at-point 'symbol t)))
     (if (and (buffer-file-name) cursor-symbol)
-        (counsel-gtags--from-here (substring-no-properties cursor-symbol))
+        (counsel-gtags--from-here cursor-symbol)
       (call-interactively 'counsel-gtags-find-definition))))
 
-(defvar counsel-gtags-mode-name " CounselGtags")
-(defvar counsel-gtags-mode-map (make-sparse-keymap))
+(defvar counsel-gtags-command-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "g") #'counsel-gtags-dwim)
+    (define-key map (kbd "d") #'counsel-gtags-find-definition)
+    (define-key map (kbd "r") #'counsel-gtags-find-reference)
+    (define-key map (kbd "s") #'counsel-gtags-find-symbol)
+    (define-key map (kbd "n") #'counsel-gtags-go-forward)
+    (define-key map (kbd "p") #'counsel-gtags-go-backward)
+    (define-key map (kbd "c") #'counsel-gtags-create-tags)
+    (define-key map (kbd "u") #'counsel-gtags-update-tags)
+    (define-key map (kbd "f") #'counsel-gtags-find-file)
+    (define-key map (kbd "4 d") #'counsel-gtags-find-definition-other-window)
+    (define-key map (kbd "4 r") #'counsel-gtags-find-reference-other-window)
+    (define-key map (kbd "4 s") #'counsel-gtags-find-symbol-other-window)
+    (define-key map (kbd "4 f") #'counsel-gtags-find-file-other-window)
+    map)
+  "Keymap for counsel-gtags commands after prefix.")
+
+(defvar counsel-gtags-mode-map (make-sparse-keymap)
+  "Keymap for  counsel-gtags-mode.")
 
 ;;;###autoload
 (define-minor-mode counsel-gtags-mode ()
   "Minor mode of counsel-gtags.
   If `counsel-gtags-update-tags' is non-nil, the tag files are updated
   after saving buffer."
-  :init-value nil
-  :global     nil
   :keymap     counsel-gtags-mode-map
-  :lighter    counsel-gtags-mode-name
   (if counsel-gtags-mode
       (when counsel-gtags-auto-update
         (add-hook 'after-save-hook 'counsel-gtags-update-tags nil t))
     (when counsel-gtags-auto-update
       (remove-hook 'after-save-hook 'counsel-gtags-update-tags t))))
-
-;; Key mapping of gtags-mode.
-(when counsel-gtags-use-suggested-key-map
-  ;; Current key mapping.
-  (let ((command-table '(("s" . counsel-gtags-find-symbol)
-                         ("r" . counsel-gtags-find-reference)
-                         ("t" . counsel-gtags-find-definition)
-                         ("d" . counsel-gtags-find-definition)))
-        (key-func (if (string-prefix-p "\\" counsel-gtags-prefix-key)
-                      #'concat
-                    (lambda (prefix key) (kbd (concat prefix " " key))))))
-    (cl-loop for (key . command) in command-table
-             do
-             (define-key counsel-gtags-mode-map (funcall key-func counsel-gtags-prefix-key key) command))
-
-    ;; common
-    (define-key counsel-gtags-mode-map "\C-]" 'counsel-gtags--from-here)
-    (define-key counsel-gtags-mode-map "\C-t" 'counsel-gtags-go-backward)
-    (define-key counsel-gtags-mode-map "\e*" 'counsel-gtags-go-backward)
-    (define-key counsel-gtags-mode-map "\e." 'counsel-gtags-find-definition)))
 
 (provide 'counsel-gtags)
 

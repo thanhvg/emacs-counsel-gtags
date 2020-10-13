@@ -88,6 +88,13 @@ Find name by context.
   (define-key counsel-gtags-mode-map (kbd "M-,") 'counsel-gtags-go-backward))
 ```
 
+There are some useful custom variables like
+
+- counsel-gtags-simule-xref: To replace the xref bindings with some of our functions.
+- counsel-gtags-use-input-at-point: To use `thing-at-point' functions.
+- counsel-gtags-debug-mode : To enable debug mode which prints some of
+  the commands in the \*Messages\* buffer.
+
 ## See also
 
 My other "using global from withing Emacs" package: [global-tags.el](https://launchpad.net/global-tags.el)
