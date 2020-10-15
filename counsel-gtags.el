@@ -42,10 +42,6 @@
   "`counsel' for GNU Global"
   :group 'counsel)
 
-(defcustom counsel-gtags-ignore-case nil
-  "Whether to ignore case in search pattern."
-  :type 'boolean)
-
 (defconst counsel-gtags-path-styles-list '(through relative absolute abslib))
 
 (defcustom counsel-gtags-path-style 'through
@@ -154,7 +150,7 @@ The arguments FORMAT-STRING and ARGS are the same than in the
       (let ((inhibit-message t))
 	(apply #'message format-string args))))
 
-(defun counsel-gtags--command-options (type extra-options)
+(defun counsel-gtags--command-options (type tagname extra-options)
   "Get list with options for global command according to TYPE.
 
 Prepend EXTRA-OPTIONS.  If \"--result=.\" is in EXTRA-OPTIONS, it will have
@@ -164,7 +160,7 @@ precedence over default \"--result=grep\"."
 	 (options (concat
 		   (and (getenv "GTAGSLIBPATH") "-T ")
 		   (and current-prefix-arg "-l ")
-		   (and counsel-gtags-ignore-case "-i ")
+		   (and tagname (ivy--case-fold-p tagname) "-i ") ;; -M is already default
 		   (and (memq counsel-gtags-path-style counsel-gtags-path-styles-list)
 			(format "--path-style=%s " (symbol-name counsel-gtags-path-style)))
 		   (assoc-default type counsel-gtags--complete-options-alist) " "
@@ -204,7 +200,7 @@ Used in `counsel-gtags--async-tag-query'.  Call global \"list all
  `counsel--async-filter' is too slow with lots of tags."
   (concat
    "global -c "
-   (counsel-gtags--command-options 'definition nil)
+   (counsel-gtags--command-options 'definition query nil)
    " | "
    (counsel-gtags--get-grep-command-find)
    " "
@@ -344,7 +340,7 @@ This is for internal use and not for final user."
   (let* ((query-quoted (and tagname
 			    (stringp tagname)
 			    (shell-quote-argument tagname)))
-	 (options (counsel-gtags--command-options type extra-options))
+	 (options (counsel-gtags--command-options type tagname extra-options))
          (default-directory default-directory)
          (coding-system-for-read buffer-file-coding-system)
          (coding-system-for-write buffer-file-coding-system))
@@ -364,13 +360,17 @@ Extra command line parameters to global are forwarded through EXTRA-OPTIONS."
 	 (collection (counsel-gtags--collect-candidates type tagname extra-options))
 	 (ivy-auto-select-single-candidate t)
 	 (first (cadr collection)))
-    (if (and auto-select-only-candidate (= (length collection) 1))
-        (counsel-gtags--find-file (car first))
+    (cond
+     ((null collection) ;; No candidates in collection.
+      (message "No candidate available for %s" tagname)
+      nil)
+     ((and auto-select-only-candidate (= (length collection) 1))
+      (counsel-gtags--find-file (car first)))
+     (t
       (ivy-read "Pattern: "
 		collection
 		:action #'counsel-gtags--find-file
-		:caller 'counsel-gtags--select-file))))
-
+		:caller 'counsel-gtags--select-file)))))
 (ivy-set-actions
  'counsel-gtags--select-file
  '(("j" counsel-gtags--find-file-other-window "other window")))
@@ -542,7 +542,7 @@ Return t on success, nil otherwise."
        (if (zerop (process-exit-status process))
 	   (progn
              (message "Success: %s TAGS" ,action)
-	     (setq counsel-gtags--last-update-time current-time))
+	     (setq counsel-gtags--last-update-time (current-time)))
          (message "Failed: %s TAGS(%d)" ,action (process-exit-status process))))))
 
 
@@ -558,7 +558,7 @@ Return t on success, nil otherwise."
 	(default-directory (file-name-as-directory default-directory)))
     (if (file-remote-p filename)
         (tramp-file-name-localname (tramp-dissect-file-name filename))
-      (file-truename filename))))
+      (expand-file-name filename))))
 
 (defsubst counsel-gtags--read-tag-directory ()
   "Get directory for tag generation from user."

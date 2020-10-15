@@ -117,6 +117,11 @@ int the_second_func(int x) {
 int the_third_func(int x) {
   return 0;
 }
+
+int theThirdFunction(int x) {
+  return 0;
+}
+
 int main{
     int local_int;
 }")
@@ -192,9 +197,40 @@ int main{
      (should
       (equal collected expected)))))
 
-(ert-deftest default-case-sensitive ()
+;; Only lowercase
+(ert-deftest auto-case-sensitive-1 ()
   (let ((ivy-auto-select-single-candidate t)
 	(counsel-gtags-path-style 'relative))
+    (counsel-gtags--with-mock-project
+     (should
+      (string-prefix-p "main.c"
+		       (counsel-gtags-find-definition
+			"thethirdfunction"))))))
+
+;;Add an upper case toggles case sensitive
+(ert-deftest auto-case-sensitive-2 ()
+  (let ((ivy-auto-select-single-candidate t)
+	(counsel-gtags-path-style 'relative))
+    (counsel-gtags--with-mock-project
+     (should
+      (not (counsel-gtags-find-definition
+			     "theThirdfunction"))))))
+
+;; Add an upper right must find it
+(ert-deftest auto-case-sensitive-3 ()
+  (let ((ivy-auto-select-single-candidate t)
+	(counsel-gtags-path-style 'relative))
+    (counsel-gtags--with-mock-project
+     (should
+      (string-prefix-p "main.c"
+		       (counsel-gtags-find-definition
+			"theThirdFunction"))))))
+
+;; Use ivy-case-fold-search-default custom
+(ert-deftest never-case-sensitive ()
+  (let ((ivy-auto-select-single-candidate t)
+	(counsel-gtags-path-style 'relative)
+	(ivy-case-fold-search-default t))
     (counsel-gtags--with-mock-project
      (should
       (string-prefix-p "main.c"
@@ -204,12 +240,12 @@ int main{
 (ert-deftest ignore-case ()
   (let ((counsel-gtags-path-style 'relative)
 	(ivy-auto-select-single-candidate t)
-	(counsel-gtags-ignore-case t))
+	(counsel-gtags-ignore-case t)
+	(ivy-case-fold-search-default nil))
     (counsel-gtags--with-mock-project
      (should
-      (string-prefix-p "main.c"
-		       (counsel-gtags-find-definition
-			"ANOTHER_GLOBAL_FUN"))))))
+      (not (counsel-gtags-find-definition
+			     "ANOTHER_GLOBAL_FUN"))))))
 
 (ert-deftest file-path-resolution ()
   "`counsel-gtags--remote-truename' resolves local file paths correctly.
@@ -225,6 +261,7 @@ No queries to global involved."
 	 (resolved-file-path (counsel-gtags--remote-truename "some-module/marichiweu.c")))
     (should (string-equal
 	     expected-file-path resolved-file-path))))
+
 
 (ert-deftest file-path-results ()
   "Handling of results for file queries (global … -P …).
