@@ -207,15 +207,14 @@ int main{
 		       (counsel-gtags-find-definition
 			"thethirdfunction"))))))
 
-;; Add an upper case toggles case sensitive
+;;Add an upper case toggles case sensitive
 (ert-deftest auto-case-sensitive-2 ()
   (let ((ivy-auto-select-single-candidate t)
 	(counsel-gtags-path-style 'relative))
     (counsel-gtags--with-mock-project
      (should
-      (not (string-prefix-p "main.c"
-			    (counsel-gtags-find-definition
-			     "theThirdfunction")))))))
+      (not (counsel-gtags-find-definition
+			     "theThirdfunction"))))))
 
 ;; Add an upper right must find it
 (ert-deftest auto-case-sensitive-3 ()
@@ -245,9 +244,8 @@ int main{
 	(ivy-case-fold-search-default nil))
     (counsel-gtags--with-mock-project
      (should
-      (string-prefix-p "main.c"
-		       (counsel-gtags-find-definition
-			"ANOTHER_GLOBAL_FUN"))))))
+      (not (counsel-gtags-find-definition
+			     "ANOTHER_GLOBAL_FUN"))))))
 
 (ert-deftest file-path-resolution ()
   "`counsel-gtags--remote-truename' resolves local file paths correctly.
@@ -263,6 +261,7 @@ No queries to global involved."
 	 (resolved-file-path (counsel-gtags--remote-truename "some-module/marichiweu.c")))
     (should (string-equal
 	     expected-file-path resolved-file-path))))
+
 
 (ert-deftest file-path-results ()
   "Handling of results for file queries (global … -P …).

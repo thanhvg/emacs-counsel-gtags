@@ -360,13 +360,17 @@ Extra command line parameters to global are forwarded through EXTRA-OPTIONS."
 	 (collection (counsel-gtags--collect-candidates type tagname extra-options))
 	 (ivy-auto-select-single-candidate t)
 	 (first (cadr collection)))
-    (if (and auto-select-only-candidate (= (length collection) 1))
-        (counsel-gtags--find-file (car first))
+    (cond
+     ((null collection) ;; No candidates in collection.
+      (message "No candidate available for %s" tagname)
+      nil)
+     ((and auto-select-only-candidate (= (length collection) 1))
+      (counsel-gtags--find-file (car first)))
+     (t
       (ivy-read "Pattern: "
 		collection
 		:action #'counsel-gtags--find-file
-		:caller 'counsel-gtags--select-file))))
-
+		:caller 'counsel-gtags--select-file)))))
 (ivy-set-actions
  'counsel-gtags--select-file
  '(("j" counsel-gtags--find-file-other-window "other window")))
@@ -554,7 +558,7 @@ Return t on success, nil otherwise."
 	(default-directory (file-name-as-directory default-directory)))
     (if (file-remote-p filename)
         (tramp-file-name-localname (tramp-dissect-file-name filename))
-      (file-truename filename))))
+      (expand-file-name filename))))
 
 (defsubst counsel-gtags--read-tag-directory ()
   "Get directory for tag generation from user."
