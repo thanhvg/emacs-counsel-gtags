@@ -75,6 +75,18 @@ Find name by context.
 - Jump to tag definition if cursor is on tag reference
 - Jump to tag reference if cursor is on tag definition
 
+### Other window commands
+
+There are also the commands:
+- counsel-gtags-find-definition-other-window
+- counsel-gtags-find-reference-other-window
+- counsel-gtags-find-symbol-other-window
+- counsel-gtags-find-file-other-window
+
+Similar to the mentioned before with similar names but use other
+windows instead of the same. This functionality is also available
+throw `ivy-actions` in the candidates list pressing `M-o j`.
+
 ## Sample Configuration
 
 ```lisp
@@ -88,9 +100,25 @@ Find name by context.
   (define-key counsel-gtags-mode-map (kbd "M-,") 'counsel-gtags-go-backward))
 ```
 
+A simpler alternative to the previous configuration is to use the
+included `counsel-gtags-command-map` which has all the interactive
+commands already defined. If you want to use that map you only need to
+define a prefix for it.
+
+```lisp
+(define-key counsel-gtags-mode-map (kbd ...) #'counsel-gtags-command-map)
+```
+Or if you have `use-packages` and prefer autoloads.
+
+```lisp
+(use-package counsel-gtags
+	:bind-keymap ("C-c g" . counsel-gtags-command-map)
+	:config
+	(counsel-gtags-mode 1))
+```
+
 There are some useful custom variables like
 
-- counsel-gtags-simule-xref: To replace the xref bindings with some of our functions.
 - counsel-gtags-use-input-at-point: To use `thing-at-point' functions.
 - counsel-gtags-debug-mode : To enable debug mode which prints some of
   the commands in the \*Messages\* buffer.
