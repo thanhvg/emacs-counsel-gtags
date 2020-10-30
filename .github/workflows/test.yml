@@ -1,0 +1,48 @@
+name: Test counsel-gtags in emacs
+
+on: [push]
+
+jobs:
+  test:
+    name: Test counsel-gtags
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: purcell/setup-emacs@master
+        with:
+          version: 27.1
+
+      - name: Apt install
+        run: |
+          sudo apt update
+          sudo apt -y install openssh-server global silversearcher-ag
+          
+      - name: Install and start ssh
+        run: |
+          sudo systemctl restart ssh
+
+      - name: Create and add ssh key
+        run: |
+          ssh-keygen -t rsa -b 4096 -N '' -f ~/.ssh/id_rsa
+          cat ~/.ssh/id_rsa.pub | tee -a ~/.ssh/authorized_keys
+
+      - name: Ensure the owner of the key is correct
+        run: |
+          chmod 600 ~/.ssh/authorized_keys
+          chmod 700 ~/.ssh
+          sudo chmod -c 0755 ~/
+          ls -la ~/.ssh
+
+      - name: Test SSH connection to localhost
+        run: ssh -vvv -i ~/.ssh/id_rsa -o BatchMode=yes -o StrictHostKeyChecking=no $(whoami)@localhost
+
+      - name: Run tests
+        shell: bash
+        run: |
+          emacs --version
+          global --version
+          make test
+
+# A pretty complete example
+# https://github.com/szermatt/emacs-bash-completion/blob/fa5557709ee11b41a2b5393efe60cd464c56f76e/.github/workflows/test.yml
