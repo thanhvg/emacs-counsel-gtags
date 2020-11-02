@@ -197,6 +197,17 @@ int main{
      (should
       (equal collected expected)))))
 
+;; Definition
+(ert-deftest find-definition-static ()
+  (let ((ivy-auto-select-single-candidate t)
+	(counsel-gtags-path-style 'relative)
+	(counsel-gtags-use-dynamic-list nil))
+    (counsel-gtags--with-mock-project
+     (should
+      (string-prefix-p "main.c"
+		       (counsel-gtags-find-definition
+			"thethirdfunction"))))))
+
 ;; Only lowercase
 (ert-deftest auto-case-sensitive-1 ()
   (let ((ivy-auto-select-single-candidate t)
