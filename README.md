@@ -119,9 +119,28 @@ Or if you have `use-packages` and prefer autoloads.
 
 There are some useful custom variables like
 
-- counsel-gtags-use-input-at-point: To use `thing-at-point' functions.
+- counsel-gtags-use-input-at-point: To use `thing-at-point` functions.
+
 - counsel-gtags-debug-mode : To enable debug mode which prints some of
   the commands in the \*Messages\* buffer.
+
+- counsel-gtags-use-dynamic-list:
+  > When this option is `non-nil` the
+  list of candidates will be filtered externally with a `grep` command
+  and use **ivy-read :dynamic t**; so every change in the input will
+  call the external process to update candidates list.
+
+  > When counsel-gtags-use-dynamic-list is nil the candidates list
+  from **grep -c** is passed to emacs without any filter and the
+  filtering is made with `ivy-read` command, the external process is
+  called only once per invocation, but the list may be too large in
+  some projects.  This option is recommended when using tramp and slow
+  connections and/or the expected output of **global -c** is not extremely
+  large.
+  
+  > In my use case, `nil` performs better when using tramp and **global
+  -c** in the remote host returns ~5000 candidates. When working
+  locally it also performs better in most of the cases.
 
 ## See also
 
