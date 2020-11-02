@@ -197,6 +197,17 @@ int main{
      (should
       (equal collected expected)))))
 
+;; Definition
+(ert-deftest find-definition-static ()
+  (let ((ivy-auto-select-single-candidate t)
+	(counsel-gtags-path-style 'relative)
+	(counsel-gtags-use-dynamic-list nil))
+    (counsel-gtags--with-mock-project
+     (should
+      (string-prefix-p "main.c"
+		       (counsel-gtags-find-definition
+			"thethirdfunction"))))))
+
 ;; Only lowercase
 (ert-deftest auto-case-sensitive-1 ()
   (let ((ivy-auto-select-single-candidate t)
@@ -344,8 +355,6 @@ tested with a call to `shell-command-to-string' and `split-string' like
 						   ""
 						   raw-string))))))))
 
-
-
 (ert-deftest using-tramp ()
   "See https://github.com/FelipeLema/emacs-counsel-gtags/issues/1"
   (counsel-gtags--with-mock-project
@@ -374,6 +383,18 @@ tested with a call to `shell-command-to-string' and `split-string' like
 		 (should (equal collected expected))))))
        ;; restore previous dir
        (cd current-dir)))))
+
+(ert-deftest collect-static-list ()
+  "Collect static list of candidates."
+  (counsel-gtags--with-mock-project
+   (let ((collected (counsel-gtags--sync-tag-query))
+	 (expected '("another_global_fun"
+		     "global_fun"
+		     "theThirdFunction"
+		     "the_first_func"
+		     "the_second_func"
+		     "the_third_func")))
+     (should (equal collected expected)))))
 
 (ert-deftest select-file ()
   "See https://github.com/FelipeLema/emacs-counsel-gtags/issues/2"

@@ -85,6 +85,13 @@ searching for a tag."
 The general user shouldn't use this variable."
   :type 'boolean)
 
+(defcustom counsel-gtags-use-dynamic-list t
+  "Enable use external grep to filter candidates list before
+arriving to Emacs.  This option is useful specially when using
+tramp and the candidates list is not huge."
+  :type 'boolean)
+
+
 (defconst counsel-gtags--prompts-alist
   '((definition . "Find Definition: ")
     (file      . " Find File: ")
@@ -193,18 +200,18 @@ checked for availability."
 (defun counsel-gtags--build-command-to-collect-candidates (query)
   "Build command to collect condidates filtering by QUERY.
 
-Used in `counsel-gtags--async-tag-query'.  Call global \"list all
- tags\" forward QUERY to grep command (provided by
+Used in `counsel-gtags--[a]sync-tag-query'.  Call global \"list all
+ tags\" and if QUERY is non-nil then forward to grep command (provided by
  `counsel-gtags--get-grep-command-find') to filter.  We use grep
  command because using ivy's default filter
  `counsel--async-filter' is too slow with lots of tags."
-  (concat
-   "global -c "
-   (counsel-gtags--command-options 'definition query nil)
-   " | "
-   (counsel-gtags--get-grep-command-find)
-   " "
-   (shell-quote-argument (counsel--elisp-to-pcre (ivy--regex query)))))
+  (concat "global -c "
+	  (counsel-gtags--command-options 'definition query nil)
+	  (and query  ;; Conditionally filter the list with grep.
+	       (concat " | "
+		       (counsel-gtags--get-grep-command-find)
+		       " "
+		       (shell-quote-argument (counsel--elisp-to-pcre (ivy--regex query)))))))
 
 
 (defun counsel-gtags--async-tag-query (query)
@@ -220,9 +227,15 @@ tags matching QUERY, but filter the list.
 Inspired on ivy.org's `counsel-locate-function'."
   (or (ivy-more-chars)
       (let ((command (counsel-gtags--build-command-to-collect-candidates query)))
-	(counsel-gtags--debug-message "Command: %s" command)
+	(counsel-gtags--debug-message "Async Command: %s" command)
 	(counsel--async-command command)
 	'("" "Filtering …"))))
+
+(defun counsel-gtags--sync-tag-query ()
+  "Gather the object names for `ivy-read'."
+  (let ((command (counsel-gtags--build-command-to-collect-candidates nil)))
+    (counsel-gtags--debug-message "Sync Command: %s" command)
+    (counsel-gtags--process-lines command)))
 
 (defun counsel-gtags--file-and-line (candidate)
   "Return list with file and position per CANDIDATE.
@@ -301,24 +314,24 @@ initial input for `ivy-read'.
 
 See `counsel-gtags--async-tag-query' for more info."
   `(ivy-read ,(alist-get type counsel-gtags--prompts-alist)
-	     #'counsel-gtags--async-tag-query
+	     (if counsel-gtags-use-dynamic-list
+		 #'counsel-gtags--async-tag-query
+	       (counsel-gtags--sync-tag-query))
 	     :initial-input (and counsel-gtags-use-input-at-point
 				 (ivy-thing-at-point))
 	     :unwind (lambda ()
 		       (counsel-delete-process)
 		       (swiper--cleanup))
-	     :dynamic-collection t
+	     :dynamic-collection counsel-gtags-use-dynamic-list
 	     :caller 'counsel-gtags--read-tag))
 
-
-(defun counsel-gtags--process-lines (command args)
+(defun counsel-gtags--process-lines (command)
   "Like `process-lines' on COMMAND and ARGS, but using `process-file'.
 
 `process-lines' does not support Tramp because it uses `call-process'.  Using
 `process-file' makes Tramp support auto-magical."
   ;; Space before buffer name to make it "invisible"
   (let* ((global-run-buffer (get-buffer-create (format " *global @ %s*" default-directory)))
-	 (command (concat command " " args))
 	 (lines (progn
 		  (with-current-buffer global-run-buffer
 		    (erase-buffer))
@@ -345,7 +358,7 @@ This is for internal use and not for final user."
          (coding-system-for-read buffer-file-coding-system)
          (coding-system-for-write buffer-file-coding-system))
 
-    (counsel-gtags--process-lines "global" (concat options query-quoted))))
+    (counsel-gtags--process-lines (concat "global " options query-quoted))))
 
 
 (defun counsel-gtags--select-file (type tagname
