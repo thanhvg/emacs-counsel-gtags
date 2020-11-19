@@ -459,7 +459,7 @@ Useful for jumping from a location when using global commands (like with
 		       (locate-dominating-file default-directory "GTAGS")
 		       ;; If file doesn't exist create it?
 		       (if (yes-or-no-p "File GTAGS not found. Run 'gtags'? ")
-			   (interactive-call counsel-gtags-create-tags)
+			   (call-interactively 'counsel-gtags-create-tags)
 			 (error "Abort generating tag files")))))))
 
 ;;;###autoload
