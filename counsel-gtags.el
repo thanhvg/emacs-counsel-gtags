@@ -6,7 +6,7 @@
 ;;         Felipe Lema <felipelema@mortemale.org>
 ;;         Jimmy Aguilar Mena <spacibba@aol.com>
 ;; URL: https://github.com/FelipeLema/emacs-counsel-gtags
-;; Version: 0.01
+;; Version: 0.10
 ;; Package-Requires: ((emacs "25.1") (counsel "0.8.0") (seq "1.0"))
 
 ;; This program is free software; you can redistribute it and/or modify
