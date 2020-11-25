@@ -681,7 +681,7 @@ its definition."
   "Keymap for  counsel-gtags-mode.")
 
 ;;;###autoload
-(define-minor-mode counsel-gtags-mode ()
+(define-minor-mode counsel-gtags-mode
   "Minor mode of counsel-gtags.
   If `counsel-gtags-update-tags' is non-nil, the tag files are updated
   after saving buffer."
