@@ -371,14 +371,13 @@ Use AUTO-SELECT-ONLY-CANDIDATE to skip `ivy-read' if have a single candidate.
 Extra command line parameters to global are forwarded through EXTRA-OPTIONS."
   (let* ((default-directory (counsel-gtags--default-directory))
 	 (collection (counsel-gtags--collect-candidates type tagname extra-options))
-	 (ivy-auto-select-single-candidate t)
-	 (first (cadr collection)))
+	 (ivy-auto-select-single-candidate t))
     (cond
      ((null collection) ;; No candidates in collection.
       (message "No candidate available for %s" tagname)
       nil)
      ((and auto-select-only-candidate (= (length collection) 1))
-      (counsel-gtags--find-file (car first)))
+      (counsel-gtags--find-file (car collection)))
      (t
       (ivy-read "Pattern: "
 		collection
